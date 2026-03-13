@@ -14,6 +14,7 @@
 ## Step 1 工作流如何连接（双 Agent Phase）
 
 先从一个最小的 Phase 开始：`ENTRY → instructor → assistant → EXIT`。
+为了让 `user_demand` 透明直传给 `Assistant`，这里额外保留一条 `ENTRY → assistant` 的边。
 
 <ThemedDiagram
   light="/imgs/tutorial/chatdev-lite/prog-01-workflow-light.svg"
@@ -60,6 +61,7 @@ assistant = g.create_node(
 )
 
 g.edge_from_entry(instructor, {"user_demand": "用户需求"})
+g.edge_from_entry(assistant, {"user_demand": "用户需求"})
 g.create_edge(instructor, assistant, {"instructor_guidance": "Instructor的指导意见"})
 g.edge_to_exit(assistant, {"assistant_response": "Assistant的响应"})
 
@@ -74,7 +76,7 @@ print(out["assistant_response"])
 ## Step 2 使用 Loop 实现多轮协作（Edge 消息）
 
 将 Step 1 的链路置于循环体内，得到一个支持多轮收敛的 Phase。  
-为了便于演示“水平消息传递”，本节仍以 Edge keys 作为字段契约，循环体内通过 `assistant_response` 与 `instructor_guidance` 往返迭代。
+为了便于演示“水平消息传递”，本节仍以 Edge keys 作为字段契约，循环体内通过 `assistant_response` 与 `instructor_guidance` 往返迭代，同时由 `CONTROLLER` 直接向 `Assistant` 透传 `user_demand`。
 
 <ThemedDiagram
   light="/imgs/tutorial/chatdev-lite/prog-04-loop-edge-light.svg"
@@ -127,6 +129,7 @@ instructor = dialog.create_node(
 )
 
 dialog.edge_from_controller(instructor, {"user_demand": "用户需求", "assistant_response": "上一轮的Assistant响应"})
+dialog.edge_from_controller(assistant, {"user_demand": "用户需求"})
 dialog.create_edge(instructor, assistant, {"instructor_guidance": "Instructor的指导意见"})
 dialog.edge_to_controller(assistant, {"assistant_response": "Assistant的响应"})
 

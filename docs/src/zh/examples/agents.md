@@ -30,7 +30,7 @@ model = OpenAIModel(
 agent = SingleAgent(
     name="demo_single",
     model=model,
-    instructions="你是一个简洁的助手，请用 JSON 回复：{answer: ...}",
+    instructions="你是一个简洁的助手，请用 JSON 回复，并包含 answer 字段。",
     prompt_template="问题：{query}",
 )
 

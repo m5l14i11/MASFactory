@@ -288,7 +288,7 @@ from datetime import datetime, timezone
 from masfactory import Agent, SimpleKeywordRetriever
 
 def get_utc_now() -> str:
-    \"\"\"Get current UTC time in ISO format.\"\"\"
+    """Get current UTC time in ISO format."""
     return datetime.now(timezone.utc).isoformat()
 
 retriever = SimpleKeywordRetriever({"doc": "..."}, passive=False, active=True)

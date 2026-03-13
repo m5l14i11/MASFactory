@@ -15,6 +15,7 @@
 ## Step 1 连接一个由两个Agent组成的Graph
 
 先从一个最小的 Phase 开始：`ENTRY → instructor → assistant → EXIT`。  
+为了让 `user_demand` 透明直传给 `Assistant`，这里额外保留一条 `ENTRY → assistant` 的边。  
 在该结构中，`Assistant` 负责产出草案，`Instructor` 负责审阅并收敛到可执行结果。
 
 <ThemedDiagram
@@ -63,7 +64,9 @@ Assistant = NodeTemplate(
 )
 
 
-# 3) 用 nodes/edges 装配结构：ENTRY → instructor → assistant → EXIT
+# 3) 用 nodes/edges 装配结构：
+#    主链路：ENTRY → instructor → assistant → EXIT
+#    同时增加一条 ENTRY → assistant 的边，用于透明传递 user_demand
 #    注意：Edge 的 key 定义了消息字段契约；`Agent.output_keys` 会从出边汇总而来。
 g = RootGraph(
     name="p1_workflow_decl",
@@ -73,6 +76,7 @@ g = RootGraph(
     ],
     edges=[
         ("ENTRY", "instructor", {"user_demand": "用户需求"}),
+        ("ENTRY", "assistant", {"user_demand": "用户需求"}),
         ("instructor", "assistant", {"instructor_guidance": "Instructor的指导意见"}),
         ("assistant", "EXIT", {"assistant_response": "Assistant的响应"}),
     ],
@@ -89,7 +93,7 @@ print(out["assistant_response"])
 ## Step 2 使用 Loop 实现多轮协作（Edge 消息）
 
 Step 1 的 Phase 仅执行一次。实际场景中，一个 Phase 往往需要多轮往返以逐步收敛方案。  
-此处引入 `Loop`：将 `Assistant → Instructor` 的链路置于循环体内，通过 Edge 在每一轮传递 `workspace`。
+此处引入 `Loop`：将 `Instructor → Assistant` 的链路置于循环体内，并让 `CONTROLLER` 在每一轮直接把 `user_demand` 传给 `Assistant`。
 
 <ThemedDiagram
   light="/imgs/tutorial/chatdev-lite/prog-04-loop-edge-light.svg"
@@ -144,10 +148,11 @@ DialogLoop = NodeTemplate(
     edges=[
         # Loop 没有 ENTRY/EXIT，而以 CONTROLLER 作为循环调度入口。
         ("CONTROLLER", "instructor", {"user_demand": "用户需求", "assistant_response": "上一轮的Assistant的响应"}),
+        ("CONTROLLER", "assistant", {"user_demand": "用户需求"}),
         ("instructor", "assistant", {"instructor_guidance": "Instructor的指导意见"}),
         ("assistant", "CONTROLLER", {"assistant_response": "Assistant的响应"}),
     ],
-    initial_message={"assistant_response": "No assistant response yet."},   # 第一轮 instructor 发言时，还没有 assistant 的响应，所以要给 assistant_response 设定一个默认值避免出错。
+    initial_messages={"assistant_response": "No assistant response yet."},   # 第一轮 instructor 发言时，还没有 assistant 的响应，所以要给 assistant_response 设定一个默认值避免出错。
 )
 
 g = RootGraph(

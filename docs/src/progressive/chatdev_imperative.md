@@ -17,6 +17,8 @@ Start from:
 
 `ENTRY → instructor → assistant → EXIT`
 
+To keep `user_demand` transparent, `ENTRY` also passes it directly to `assistant`.
+
 <ThemedDiagram
   light="/imgs/tutorial/chatdev-lite/prog-01-workflow-en-light.svg"
   dark="/imgs/tutorial/chatdev-lite/prog-01-workflow-en-dark.svg"
@@ -58,6 +60,7 @@ assistant = g.create_node(
 )
 
 g.edge_from_entry(instructor, {"user_demand": "user demand"})
+g.edge_from_entry(assistant, {"user_demand": "user demand"})
 g.create_edge(instructor, assistant, {"instructor_guidance": "Instructor guidance"})
 g.edge_to_exit(assistant, {"assistant_response": "Assistant response"})
 
@@ -72,7 +75,7 @@ print(out["assistant_response"])
 ## Step 2 — Multi-turn collaboration with Loop (edge messages)
 
 Wrap Step 1 into a loop to support multi-turn convergence.  
-To demonstrate horizontal passing, we keep using edge keys inside the loop and iterate via `assistant_response` ↔ `instructor_guidance`.
+To demonstrate horizontal passing, we keep using edge keys inside the loop and iterate via `assistant_response` ↔ `instructor_guidance`, while `CONTROLLER` keeps passing `user_demand` directly to `assistant`.
 
 <ThemedDiagram
   light="/imgs/tutorial/chatdev-lite/prog-04-loop-edge-en-light.svg"
@@ -125,6 +128,7 @@ instructor = dialog.create_node(
 )
 
 dialog.edge_from_controller(instructor, {"user_demand": "user demand", "assistant_response": "previous Assistant response"})
+dialog.edge_from_controller(assistant, {"user_demand": "user demand"})
 dialog.create_edge(instructor, assistant, {"instructor_guidance": "Instructor guidance"})
 dialog.edge_to_controller(assistant, {"assistant_response": "Assistant response"})
 
@@ -580,4 +584,3 @@ print("done, manual bytes:", len(str(out_attrs.get("manual", ""))))
 - This chapter is designed for quickly learning MASFactory’s imperative paradigm, so it omits some implementation details of ChatDev.
   For complete reproductions, refer to: [ChatDev-Lite](https://github.com/BUPT-GAMMA/MASFactory/tree/main/applications/chatdev_lite) or [ChatDev](https://github.com/BUPT-GAMMA/MASFactory/tree/main/applications/chatdev).
 :::
-

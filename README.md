@@ -28,6 +28,93 @@ Key capabilities:
 - **Visualization and observability:** **MASFactory Visualizer** provides topology preview, runtime tracing, and human-in-the-loop interaction.
 - **Context protocol (`ContextBlock`):** organize Memory / RAG / MCP context sources in a structured way, with automatic injection and on-demand retrieval.
 
+## 🧭 Why Choose MASFactory
+
+As multi-agent systems grow more capable, orchestration is still largely stuck in the age of manual assembly: either teams hand-write workflow code, or they drag and configure nodes one by one on a canvas. With Vibe Graphing, MASFactory aims to free people from tedious orchestration work: express the intent in natural language, let AI draft the collaboration structure, keep refining it with human corrections and confirmations, and finally compile the result into an executable graph workflow.
+
+<p align="center">
+  <img
+    src="docs/src/public/imgs/readme/vibegraphing_diagram_en.png"
+    alt="Vibe Graphing pipeline from intent to executable workflow"
+    width="780"
+  />
+</p>
+
+This shifts human effort away from low-level wiring and repetitive configuration, and back toward designing the multi-agent system itself.
+
+Viewed more directly, today's multi-agent development frameworks roughly fall into the following categories:
+
+| Platform Type | Representative Products | Positioning | Support for Multi-Agent Systems |
+| --- | --- | --- | --- |
+| **Code frameworks** | `MASFactory`, ChatDev2(DevAll), LangGraph, AutoGen | Build complex multi-agent systems | Still highly dependent on handwritten code and engineering implementation |
+| **Low-code workflow platforms** | `MASFactory`, ChatDev2(DevAll), Coze, Dify | Lower the barrier to building multi-agent systems with low-code workflows | Difficult to support deep customization and complex topologies for advanced systems |
+| **Vibe Graphing orchestration frameworks** | `MASFactory` | Rapidly design and iterate multi-agent systems with lower human cost | Humans do not need to spend much effort on coding or dragging nodes, only on clearly describing needs and refining the design through dialogue |
+
+## 🏗️ System Architecture
+
+MASFactory adopts the widely used graph-centric approach to multi-agent orchestration and abstracts the system into four layers:
+
+<p align="center">
+  <img
+    src="docs/src/public/imgs/readme/framework.png"
+    alt="MASFactory framework layers"
+    width="860"
+  />
+</p>
+
+- **Graph skeleton layer:** `Node` and `Edge` are the lowest-level abstractions, using graph structure to represent collaboration relationships, dependencies, and message flow among agents.
+- **Component layer:** this layer further packages `Node` and `Edge` into reusable collaboration units, so developers do not need to assemble workflows from scratch every time and can instead build multi-agent systems like reusable blocks:
+
+> - `Agent` is the most basic execution unit: an agent node with roles, instructions, tools, Memory, RAG, and related capabilities, responsible for concrete analysis, generation, and tool-use tasks.
+>
+> - `Graph` packages multiple nodes as a nestable subgraph, allowing complex workflows to be designed hierarchically and reused locally. A single phase can itself become a node inside a larger graph.
+>
+> - `Loop` handles iterative tasks such as repeated discussion, continuous revision, or testing until success. It turns "repeat execution until a condition is met" into a standard component.
+>
+> - `Switch` supports branching and dynamic routing. It can switch execution paths based on explicit conditions or use model capabilities to decide where messages should go, enabling more flexible collaboration topologies.
+>
+> - `Human` brings human-in-the-loop steps such as confirmation, conversational input, file review, and editing into the graph, so the system is not limited to fully automated execution and can involve people at key stages.
+>
+> - `ComposedGraph` and `NodeTemplate` provide two additional reuse mechanisms on top of the components above. The former focuses on "declare a structure first, then instantiate and assemble it," while the latter packages common collaboration structures into reusable components. MASFactory includes built-in graph patterns such as `InstructorAssistantGraph` and `BrainstormingGraph` for out-of-the-box use.
+
+  **Protocol layer:** through `Message Adapter` and `Context Adapter`, MASFactory unifies communication protocols together with Memory, RAG, MCP, and related context capabilities, making it easier to integrate external frameworks into the system.
+
+- **Interaction layer:** MASFactory supports three development paradigms:
+
+ > - Natural-language workflow construction based on `Vibe Graphing`, reducing the human cost of system development.
+ > - Two code-centric styles, `Declarative` and `Imperative`, for developers who want more flexible control over workflow authoring.
+ > - Manual workflow design through `MASFactory Visualizer`, preserving familiar low-code drag-and-drop habits.
+
+MASFactory's advantage is not that it offers yet another way to build workflows, but that it unifies code authoring, visual editing, and natural-language-driven orchestration inside the same system. Developers can write workflows by hand, assemble them visually, or let AI draft the structure first and then compile it into an executable multi-agent workflow. These three modes are not isolated from one another; they can coexist inside the same project.
+
+## 🎬 Flexible Combination of Three Development Modes with Unified Runtime Tracing
+
+Whether you start from code, drag-and-drop editing, or Vibe Graphing, the resulting graph structure can enter the same Visualizer for preview, tracing, and human intervention.
+
+### Coding with Graph Preview
+
+<p align="center">
+  <img src="docs/src/public/imgs/readme/coding.gif" alt="Code preview in MASFactory Visualizer" width="860" />
+</p>
+
+### Drag-and-Drop Design
+
+<p align="center">
+  <img src="docs/src/public/imgs/readme/drag.gif" alt="Drag and drop workflow design" width="860" />
+</p>
+
+### Vibe Graphing Interaction
+
+<p align="center">
+  <img src="docs/src/public/imgs/readme/vibe_2.gif" alt="Vibe Graphing interaction" width="860" />
+</p>
+
+### Runtime Monitoring
+
+<p align="center">
+  <img src="docs/src/public/imgs/readme/monitor.gif" alt="Runtime monitoring and tracing" width="860" />
+</p>
+
 ## ⚡ Quick Start
 
 ### 1) Install MASFactory (PyPI)

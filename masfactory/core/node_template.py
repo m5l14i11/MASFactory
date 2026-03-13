@@ -265,6 +265,23 @@ class NodeTemplate(Generic[T]):
         self.node_cls = node_cls
         self.prototype_config = default_kwargs
 
+    def __deepcopy__(self, memo: dict[int, Any]) -> "NodeTemplate[T]":
+        """Deep-copy via MASFactory clone semantics instead of Python's generic object walk.
+
+        This ensures nested NodeTemplate declarations still respect `Shared(...)`,
+        `Factory(...)`, and `__node_template_scope__` when an outer template clones
+        them as part of its prototype config.
+        """
+        obj_id = id(self)
+        if obj_id in memo:
+            return memo[obj_id]
+
+        cloned = object.__new__(type(self))
+        memo[obj_id] = cloned
+        cloned.node_cls = self.node_cls
+        cloned.prototype_config = _safe_clone(self.prototype_config, memo)
+        return cloned
+
     def render_config(self, **override_kwargs) -> dict[str, Any]:
         final_config = _safe_clone(self.prototype_config)
         final_config.update(_safe_clone(override_kwargs))
@@ -354,7 +371,7 @@ class NodeTemplate(Generic[T]):
         new_prototype_config = _safe_clone(self.prototype_config)
         new_prototype_config.update(_safe_clone(override_kwargs))
 
-        return NodeTemplate(
+        return type(self)(
             node_cls=self.node_cls,
             **new_prototype_config
         )

@@ -164,8 +164,24 @@ from masfactory.core.node_template import template_defaults_for, template_overri
 Phase = NodeTemplate(
     Loop,
     nodes=[
-        ("assistant", NodeTemplate(Agent)),
-        ("instructor", NodeTemplate(Agent)),
+        (
+            "assistant",
+            NodeTemplate(
+                Agent,
+                model=object(),  # build() example only
+                instructions="You are the Assistant.",
+                prompt_template="{workspace}",
+            ),
+        ),
+        (
+            "instructor",
+            NodeTemplate(
+                Agent,
+                model=object(),  # build() example only
+                instructions="You are the Instructor.",
+                prompt_template="{workspace}",
+            ),
+        ),
     ],
     edges=[
         ("CONTROLLER", "assistant", {"workspace": ""}),

@@ -27,6 +27,91 @@
 - **可视化与可观测：** 配套 **MASFactory Visualizer** 提供拓扑预览、运行追踪与人机交互能力。
 - **上下文协议（ContextBlock）：** 以结构化方式组织 Memory / RAG / MCP 等上下文源，支持自动注入与按需检索。
 
+## 🧭 为什么选择 MASFactory
+
+随着多智能体能力快速增强，系统编排却仍停留在手工编排的时代：要么手写工作流代码，要么在画布里逐个节点拖拽配置。MASFactory 希望通过 Vibe Graphing, 把人类从繁复的编排工作中解放出来：先用自然语言表达意图，让 AI 起草协作结构，再由人持续纠正和确认，最后把结果编译成可执行图工作流。
+
+<p align="center">
+  <img
+    src="docs/src/public/imgs/readme/vibegraphing_diagram.png"
+    alt="Vibe Graphing 从意图到可执行工作流"
+    width="780"
+  />
+</p>
+
+这样一来，人类的开发重点就从低层连线和重复配置，转移到了多智能体的设计本身。
+
+如果用更直观的方式来看今天的多智能体开发工具，大致可以分成下面几类：
+
+| 平台类型                   | 代表产品                                           | 定位                                     | 对多智能体的支持                                             |
+| -------------------------- | -------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
+| **代码框架**               | `MASFactory`、ChatDev2(DevAll)、LangGraph、AutoGen | 构建复杂多智能体系统                     | 高度依赖手写代码与工程实现                                   |
+| **低代码工作流平台**       | `MASFactory`、ChatDev2(DevAll)、Coze、Dify         | 低门槛低代码开发多智能体系统             | 难以支撑复杂多智能体系统的深度定制与复杂拓扑                 |
+| **Vibe Graphing 编排框架** | `MASFactory`                                       | 低人力成本实现多智能体系统快速设计和迭代 | 人类无需付出过多的开发、拖拽的操作，只需要将自己的需求描述清楚，并在对话中细化设计细节。 |
+
+## 🏗️ 系统框架图
+MASFactory采用业界常用的以Graph为中心的多智能体编排方法，将系统抽象为4层：
+<p align="center">
+  <img
+    src="docs/src/public/imgs/readme/framework.png"
+    alt="MASFactory 框架分层"
+    width="860"
+  />
+</p>
+- **图骨架层**：以 `Node` 和 `Edge` 作为最底层抽象，用图结构表达多智能体之间的协作关系、依赖关系和消息流动
+- **组件层**：组件层的作用，是把底层的 `Node`、`Edge` 进一步封装成可复用的协作单元，让开发者不必每次都从最底层手工拼装工作流，而是可以像搭积木一样组织多智能体系统：
+
+> - `Agent` 是最基础的执行单元，对应一个具备角色、指令、工具、Memory、RAG 等能力的智能体节点，负责完成具体分析、生成、调用等任务。
+>
+> - `Graph` 用于把多个节点封装成可嵌套的子图，让复杂流程可以分层设计、局部复用，也让“一个阶段”本身还能继续作为“另一个更大图里的节点”。
+>
+> - `Loop` 用于处理多轮迭代型任务，例如反复讨论、持续修订、测试直到通过等场景，本质上把“重复执行直到满足条件”为止的控制逻辑做成了标准组件。
+>
+> - `Switch` 用于做分支判断和动态路由，可以按照显式条件切换执行路径，也可以结合模型能力决定消息应该流向哪个节点，从而支持更灵活的协作拓扑。
+>
+> - `Human` 则把人工确认、对话输入、文件审阅与编辑等 Human-in-the-loop 环节纳入图中，使多智能体系统不再是纯自动流程，而是能够在关键步骤引入人类参与。
+>
+> - `ComposedGraph`和`NodeTemplate` 是MASFactory 在上述组件的基础之上进一步提供了两套复用能力组件，前者负责“先声明模板、后实例化装配”，后者负责把常见协作结构直接封装成可复用组件。MASFactory内置了常用的图结构(`InstructorAssistantGraph`、`BrainstormingGraph`等)，方便用户开箱即用。
+
+  **协议层**：通过 `Message Adapter` 与 `Context Adapter`，统一处理通信协议以及 Memory、RAG、MCP 等上下文能力，方便用户接入相关框架增强自己的多智能体系统。
+
+- **交互层**：MASFactory同时提供三类开发范式：
+
+ > - 基于`Vibe Graphing`的自然语言交互构造智能体工作流，降低系统开发的人力开支。
+ > - 基于`声明式`、`命令式`的两种代码开发方式，可以更加灵活自由地编写工作流。
+ > - 通过 `MASFactory Visualizer`以拖拽的方式手动设计工作流，兼容大家的低代码开发习惯。 
+
+MASFactory 的优势并不在于“再提供一种工作流搭建方式”，而在于它把代码开发、可视化编辑和自然语言驱动编排统一进了同一套系统。开发者既可以自己写，也可以自己拖拽，还可以先让 AI 起草系统结构，再编译成可运行的多智能体工作流——以上三中方式并不是相互割裂独立的，而是可以在同一个项目中同时使用。
+
+## 🎬 三种开发方式自由组合，并提供统一的运行时追踪
+
+无论你先写代码、先拖拽，还是先做 Vibe Graphing，对应的图结构都能进入同一个 Visualizer 里做预览、追踪和人工介入。
+
+### 代码编写与图结构实时预览
+
+<p align="center">
+  <img src="docs/src/public/imgs/readme/coding.gif" alt="MASFactory Visualizer 代码预览" width="860" />
+</p>
+
+### 拖拽式设计
+
+<p align="center">
+  <img src="docs/src/public/imgs/readme/drag.gif" alt="拖拽式工作流设计" width="860" />
+</p>
+
+### Vibe Graphing 交互
+
+<p align="center">
+  <img src="docs/src/public/imgs/readme/vibe_2.gif" alt="Vibe Graphing 交互式构图" width="860" />
+</p>
+
+### 运行时监测
+
+<p align="center">
+  <img src="docs/src/public/imgs/readme/monitor.gif" alt="运行时监测与追踪" width="860" />
+</p>
+
+
 ## ⚡ 快速开始
 
 ### 1) 安装 MASFactory（PyPI）

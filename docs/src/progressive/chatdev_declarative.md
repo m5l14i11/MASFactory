@@ -17,6 +17,8 @@ Start from the minimal phase:
 
 `ENTRY → instructor → assistant → EXIT`
 
+To keep `user_demand` transparent, `ENTRY` also passes it directly to `assistant`.
+
 In this structure, `Assistant` produces a draft/result, and `Instructor` provides guidance to converge the output.
 
 <ThemedDiagram
@@ -58,7 +60,8 @@ Assistant = NodeTemplate(
 )
 
 # 3) Assemble the graph with nodes/edges:
-#    ENTRY → instructor → assistant → EXIT
+#    Main flow: ENTRY → instructor → assistant → EXIT
+#    Plus a direct ENTRY → assistant edge to pass user_demand transparently.
 #    Note: `Edge.keys` defines the message field contract. `Agent.output_keys` is aggregated from outgoing edges.
 g = RootGraph(
     name="p1_workflow_decl",
@@ -68,6 +71,7 @@ g = RootGraph(
     ],
     edges=[
         ("ENTRY", "instructor", {"user_demand": "user demand"}),
+        ("ENTRY", "assistant", {"user_demand": "user demand"}),
         ("instructor", "assistant", {"instructor_guidance": "Instructor guidance"}),
         ("assistant", "EXIT", {"assistant_response": "Assistant response"}),
     ],
@@ -84,7 +88,7 @@ print(out["assistant_response"])
 ## Step 2 — Multi-turn collaboration with Loop (edge messages)
 
 Step 1 runs only once. In practice, a phase usually needs multiple turns to converge.  
-Here we introduce `Loop` and place the `Instructor → Assistant` link inside the loop body. Each turn, fields are carried by edge keys.
+Here we introduce `Loop` and place the `Instructor → Assistant` link inside the loop body. To keep `user_demand` transparent, `CONTROLLER` also passes it directly to `assistant` each turn.
 
 <ThemedDiagram
   light="/imgs/tutorial/chatdev-lite/prog-04-loop-edge-en-light.svg"
@@ -137,6 +141,7 @@ DialogLoop = NodeTemplate(
     edges=[
         # Loop does not use ENTRY/EXIT; it uses CONTROLLER as the scheduling endpoint.
         ("CONTROLLER", "instructor", {"user_demand": "user demand", "assistant_response": "previous Assistant response"}),
+        ("CONTROLLER", "assistant", {"user_demand": "user demand"}),
         ("instructor", "assistant", {"instructor_guidance": "Instructor guidance"}),
         ("assistant", "CONTROLLER", {"assistant_response": "Assistant response"}),
     ],
@@ -641,4 +646,3 @@ print("done, manual bytes:", len(str(out_attrs.get("manual", ""))))
 - This chapter is designed for quickly learning MASFactory’s declarative paradigm, so it omits some implementation details of ChatDev.
   For complete reproductions, refer to: [ChatDev-Lite](https://github.com/BUPT-GAMMA/MASFactory/tree/main/applications/chatdev_lite) or [ChatDev](https://github.com/BUPT-GAMMA/MASFactory/tree/main/applications/chatdev).
 :::
-
