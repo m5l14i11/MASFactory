@@ -16,7 +16,9 @@
 
 ## 📖 概述
 
-**MASFactory** 是一个以图结构为核心的 Multi‑Agent Orchestration 框架，面向 **Vibe Graphing** 场景打造：从意图出发生成图结构设计，在可视化环境中预览与编辑迭代收敛，最终编译为可运行的工作流，并在运行时追踪节点状态、消息与共享状态变化。
+**MASFactory** 是一个以图结构为核心的 Multi‑Agent Orchestration 框架，面向 **Vibe Graphing** 场景打造：
+
+从意图出发生成图结构设计，在可视化环境中预览与编辑迭代收敛，最终编译为可运行的工作流，并在运行时追踪节点状态、消息与共享状态变化。
 
 在线文档：https://bupt-gamma.github.io/MASFactory/
 
@@ -245,8 +247,6 @@ python applications/camel/main.py "Create a sample adder by using python"
 ```
 
 ## 📄 引用
-
-如果 MASFactory 对你的研究有帮助，欢迎引用：
 
 ```bibtex
 @article{liu2026masfactory,

@@ -17,6 +17,7 @@
 ## 📖 Overview
 
 **MASFactory** is a graph-centric framework for orchestrating Multi-Agent Systems with **Vibe Graphing**:
+
 start from intent, generate a graph design, preview and refine it in a visual environment, compile it into an executable workflow, and trace node states, messages, and shared state at runtime.
 
 Documentation: https://bupt-gamma.github.io/MASFactory/
@@ -250,8 +251,6 @@ Documentation: https://bupt-gamma.github.io/MASFactory/
 ```
 
 ## 📄 Citation
-
-If you use MASFactory in your research, please cite:
 
 ```bibtex
 @article{liu2026masfactory,
