@@ -1,0 +1,82 @@
+name: Publish VS Code Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Publish target
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - vscode-marketplace
+          - open-vsx
+      dry_run:
+        description: Package only and skip actual publishing
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            masfactory-visualizer/package-lock.json
+            masfactory-visualizer/webview-ui/package-lock.json
+
+      - name: Install extension dependencies
+        working-directory: masfactory-visualizer
+        run: npm ci
+
+      - name: Install webview dependencies
+        working-directory: masfactory-visualizer/webview-ui
+        run: npm ci
+
+      - name: Run extension tests
+        working-directory: masfactory-visualizer
+        run: npm test
+
+      - name: Package VSIX
+        id: package_extension
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: dry-run-token
+          packagePath: ./masfactory-visualizer
+          dryRun: true
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: masfactory-visualizer-vsix
+          path: ${{ steps.package_extension.outputs.vsixPath }}
+
+      - name: Publish to Open VSX
+        if: ${{ !inputs.dry_run && (inputs.target == 'both' || inputs.target == 'open-vsx') }}
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.OPEN_VSX_TOKEN }}
+          extensionFile: ${{ steps.package_extension.outputs.vsixPath }}
+          skipDuplicate: true
+
+      - name: Publish to Visual Studio Marketplace
+        if: ${{ !inputs.dry_run && (inputs.target == 'both' || inputs.target == 'vscode-marketplace') }}
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+          registryUrl: https://marketplace.visualstudio.com
+          extensionFile: ${{ steps.package_extension.outputs.vsixPath }}
+          skipDuplicate: true

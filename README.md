@@ -11,22 +11,42 @@
   />
 </div>
 <p align="center">
-    【English   | <a href="README.zh.md">Chinese</a>】
+  <a href="README.zh.md">
+    <img alt="Chinese README" src="https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-5c7cfa" />
+  </a>
+  <a href="http://arxiv.org/abs/2603.06007">
+    <img alt="Paper" src="https://img.shields.io/badge/Paper%20%7C%20-2603.06007-b31b1b?logo=arxiv&logoColor=white" />
+  </a>
+  <a href="https://www.youtube.com/watch?v=QFlQuX_cddk">
+    <img alt="Video Vibe Graphing" src="https://img.shields.io/badge/Video%20%7C%20-Vibe%20Graphing-ff0000?logo=youtube&logoColor=white" />
+  </a>
+  <a href="https://www.youtube.com/watch?v=ANynzVfY32k">
+    <img alt="Video Demonstration" src="https://img.shields.io/badge/Video%20%7C%20-Demo-d35400?logo=youtube&logoColor=white" />
+  </a>
+  <a href="LICENSE">
+    <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-5b8c5a" />
+  </a>
 </p>
 
-## 📖 Overview
-
 **MASFactory** is a graph-centric framework for orchestrating Multi-Agent Systems with **Vibe Graphing**:
-start from intent, generate a graph design, preview and refine it in a visual environment, compile it into an executable workflow, and trace node states, messages, and shared state at runtime.
 
-Documentation: https://bupt-gamma.github.io/MASFactory/
+Start from intent, generate a graph design, preview and refine it in a visual environment, compile it into an executable workflow, and trace node states, messages, and shared state at runtime.
 
-Key capabilities:
+- Paper: http://arxiv.org/abs/2603.06007
+- Documentation: https://bupt-gamma.github.io/MASFactory/
+- Demonstration Video: https://www.youtube.com/watch?v=ANynzVfY32k
+- Vibe Graphing explainer (Discover AI): https://www.youtube.com/watch?v=QFlQuX_cddk
 
-- **Vibe Graphing (intent → graph):** turn natural-language intent into a structural design, then iteratively converge to an executable, reusable workflow.
-- **Graph-style composition:** describe workflow and field contracts explicitly with `Node` / `Edge`; supports subgraphs, loops, branches, and composite components.
-- **Visualization and observability:** **MASFactory Visualizer** provides topology preview, runtime tracing, and human-in-the-loop interaction.
-- **Context protocol (`ContextBlock`):** organize Memory / RAG / MCP context sources in a structured way, with automatic injection and on-demand retrieval.
+## ✨ Key Features
+
+- 🪄 **Vibe Graphing (intent → graph)**  
+  Turn natural-language intent into a structural design, then iteratively converge to an executable, reusable workflow.
+- 🧱 **Graph-style composition**  
+  Describe workflow and field contracts explicitly with `Node` / `Edge`; supports subgraphs, loops, branches, and composite components.
+- 👁️ **Visualization and observability**  
+  **MASFactory Visualizer** provides topology preview, runtime tracing, and human-in-the-loop interaction.
+- 🧠 **Context protocol (`ContextBlock`)**  
+  Organize Memory / RAG / MCP context sources in a structured way, with automatic injection and on-demand retrieval.
 
 ## 🧭 Why Choose MASFactory
 
@@ -44,10 +64,10 @@ This shifts human effort away from low-level wiring and repetitive configuration
 
 Viewed more directly, today's multi-agent development frameworks roughly fall into the following categories:
 
-| Platform Type | Representative Products | Positioning | Support for Multi-Agent Systems |
+| Platform | Products | Focus | Strength & Limits |
 | --- | --- | --- | --- |
-| **Code frameworks** | `MASFactory`, ChatDev2(DevAll), LangGraph, AutoGen | Build complex multi-agent systems | Still highly dependent on handwritten code and engineering implementation |
-| **Low-code workflow platforms** | `MASFactory`, ChatDev2(DevAll), Coze, Dify | Lower the barrier to building multi-agent systems with low-code workflows | Difficult to support deep customization and complex topologies for advanced systems |
+| **Code frameworks** | `MASFactory`, ChatDev2(DevAll), LangGraph, AutoGen | Build complex multi-agent systems | Offer extremely high flexibility and extensibility, but have a higher entry barrier, require learning a DSL, and usually involve substantial development cost |
+| **Low-code workflow platforms** | `MASFactory`, ChatDev2(DevAll), Coze, Dify | Lower the barrier to building multi-agent systems with low-code workflows | Lower the development barrier, but still rely heavily on manual human orchestration |
 | **Vibe Graphing orchestration frameworks** | `MASFactory` | Rapidly design and iterate multi-agent systems with lower human cost | Humans do not need to spend much effort on coding or dragging nodes, only on clearly describing needs and refining the design through dialogue |
 
 ## 🏗️ System Architecture
@@ -250,8 +270,6 @@ Documentation: https://bupt-gamma.github.io/MASFactory/
 ```
 
 ## 📄 Citation
-
-If you use MASFactory in your research, please cite:
 
 ```bibtex
 @article{liu2026masfactory,

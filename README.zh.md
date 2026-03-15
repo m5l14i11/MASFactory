@@ -11,21 +11,42 @@
   />
 </div>
 <p align="center">
-    【<a href="README.md">English</a>   | Chinese】
+  <a href="README.md">
+    <img alt="English README" src="https://img.shields.io/badge/README-English-4c6ef5" />
+  </a>
+  <a href="http://arxiv.org/abs/2603.06007">
+    <img alt="Paper" src="https://img.shields.io/badge/Paper%20%7C%20-2603.06007-b31b1b?logo=arxiv&logoColor=white" />
+  </a>
+  <a href="https://www.youtube.com/watch?v=QFlQuX_cddk">
+    <img alt="Video Vibe Graphing" src="https://img.shields.io/badge/Video%20%7C%20-Vibe%20Graphing-ff0000?logo=youtube&logoColor=white" />
+  </a>
+  <a href="https://www.youtube.com/watch?v=ANynzVfY32k">
+    <img alt="Video Demonstration" src="https://img.shields.io/badge/Video%20%7C%20-Demo-d35400?logo=youtube&logoColor=white" />
+  </a>
+  <a href="LICENSE">
+    <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-5b8c5a" />
+  </a>
 </p>
 
-## 📖 概述
+**MASFactory** 是一个以图结构为核心的 Multi‑Agent Orchestration 框架，面向 **Vibe Graphing** 场景打造：
 
-**MASFactory** 是一个以图结构为核心的 Multi‑Agent Orchestration 框架，面向 **Vibe Graphing** 场景打造：从意图出发生成图结构设计，在可视化环境中预览与编辑迭代收敛，最终编译为可运行的工作流，并在运行时追踪节点状态、消息与共享状态变化。
+从意图出发生成图结构设计，在可视化环境中预览与编辑迭代收敛，最终编译为可运行的工作流，并在运行时追踪节点状态、消息与共享状态变化。
 
-在线文档：https://bupt-gamma.github.io/MASFactory/
+- Paper: http://arxiv.org/abs/2603.06007
+- Documentation: https://bupt-gamma.github.io/MASFactory/
+- Demonstration Video: https://www.youtube.com/watch?v=ANynzVfY32k
+- Vibe Graphing 讲解（Discover AI）: https://www.youtube.com/watch?v=QFlQuX_cddk
 
-核心能力：
+## ✨ Key Features
 
-- **Vibe Graphing（intent → graph）：** 从自然语言意图形成结构设计，并迭代收敛到可执行、可复用的工作流。
-- **Graph 积木式搭建：** 以 `Node/Edge` 显式描述流程与字段契约，支持子图、循环、分支与复合组件。
-- **可视化与可观测：** 配套 **MASFactory Visualizer** 提供拓扑预览、运行追踪与人机交互能力。
-- **上下文协议（ContextBlock）：** 以结构化方式组织 Memory / RAG / MCP 等上下文源，支持自动注入与按需检索。
+- 🪄 **Vibe Graphing（intent → graph）**  
+  从自然语言意图形成结构设计，并迭代收敛到可执行、可复用的工作流。
+- 🧱 **Graph 积木式搭建**  
+  以 `Node/Edge` 显式描述流程与字段契约，支持子图、循环、分支与复合组件。
+- 👁️ **可视化与可观测**  
+  配套 **MASFactory Visualizer** 提供拓扑预览、运行追踪与人机交互能力。
+- 🧠 **上下文协议（ContextBlock）**  
+  以结构化方式组织 Memory / RAG / MCP 等上下文源，支持自动注入与按需检索。
 
 ## 🧭 为什么选择 MASFactory
 
@@ -43,10 +64,10 @@
 
 如果用更直观的方式来看今天的多智能体开发工具，大致可以分成下面几类：
 
-| 平台类型                   | 代表产品                                           | 定位                                     | 对多智能体的支持                                             |
+| 平台 | 产品 | 侧重点 | 优势与局限 |
 | -------------------------- | -------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
-| **代码框架**               | `MASFactory`、ChatDev2(DevAll)、LangGraph、AutoGen | 构建复杂多智能体系统                     | 高度依赖手写代码与工程实现                                   |
-| **低代码工作流平台**       | `MASFactory`、ChatDev2(DevAll)、Coze、Dify         | 低门槛低代码开发多智能体系统             | 难以支撑复杂多智能体系统的深度定制与复杂拓扑                 |
+| **代码框架**               | `MASFactory`、ChatDev2(DevAll)、LangGraph、AutoGen | 构建复杂多智能体系统                     | 具备极高的灵活性和扩展性，但门槛较高，需要学习 DSL，并且存在较高的开发成本 |
+| **低代码工作流平台**       | `MASFactory`、ChatDev2(DevAll)、Coze、Dify         | 低门槛低代码开发多智能体系统             | 降低了开发门槛，但依然依赖大量人力手动编排                   |
 | **Vibe Graphing 编排框架** | `MASFactory`                                       | 低人力成本实现多智能体系统快速设计和迭代 | 人类无需付出过多的开发、拖拽的操作，只需要将自己的需求描述清楚，并在对话中细化设计细节。 |
 
 ## 🏗️ 系统框架图
@@ -245,8 +266,6 @@ python applications/camel/main.py "Create a sample adder by using python"
 ```
 
 ## 📄 引用
-
-如果 MASFactory 对你的研究有帮助，欢迎引用：
 
 ```bibtex
 @article{liu2026masfactory,
