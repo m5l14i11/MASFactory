@@ -40,7 +40,7 @@
 Start from intent, generate a graph design, preview and refine it in a visual environment, compile it into an executable workflow, and trace node states, messages, and shared state at runtime.
 
 - Paper: http://arxiv.org/abs/2603.06007
-- Documentation: https://bupt-gamma.github.io/MASFactory/
+- Documentation: https://docs.masfactory.dev/
 - Demonstration Video: https://www.youtube.com/watch?v=ANynzVfY32k
 - Vibe Graphing explainer (Discover AI): https://www.youtube.com/watch?v=QFlQuX_cddk
 
@@ -235,7 +235,7 @@ python applications/camel/main.py "Create a sample adder by using python"
 
 ## 📚 Learning Index
 
-Documentation: https://bupt-gamma.github.io/MASFactory/
+Documentation: https://docs.masfactory.dev/
 
 - Quick Start: Introduction → Installation → Visualizer → First Code
 - Progressive Tutorials: ChatDev Lite (Declarative / Imperative / VibeGraph)

@@ -40,7 +40,7 @@
 从意图出发生成图结构设计，在可视化环境中预览与编辑迭代收敛，最终编译为可运行的工作流，并在运行时追踪节点状态、消息与共享状态变化。
 
 - Paper: http://arxiv.org/abs/2603.06007
-- Documentation: https://bupt-gamma.github.io/MASFactory/
+- Documentation: https://docs.masfactory.dev/
 - Demonstration Video: https://www.youtube.com/watch?v=ANynzVfY32k
 - Vibe Graphing 讲解（Discover AI）: https://www.youtube.com/watch?v=QFlQuX_cddk
 
@@ -232,7 +232,7 @@ python applications/camel/main.py "Create a sample adder by using python"
 ```
 
 ## 📚 学习索引
-在线文档地址：https://bupt-gamma.github.io/MASFactory/
+在线文档地址：https://docs.masfactory.dev/
 - 快速入门：项目简介 → 安装 → Visualizer → 第一行代码
 - 渐进式教程：ChatDev Lite（声明式 / 命令式 / VibeGraph）
 - 开发指南：核心概念 → 消息传递 → NodeTemplate → Agent 运行机制 → 上下文接口（Memory/RAG/MCP）→ Visualizer → 模型适配器

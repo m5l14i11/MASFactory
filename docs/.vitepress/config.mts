@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: "MASFactory",
   description: "Documentation for MASFactory",
-  base: "/MASFactory/",
+  base: "/",
   srcDir: 'src',
 
   themeConfig: {
