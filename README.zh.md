@@ -41,6 +41,7 @@
 
 - Paper: http://arxiv.org/abs/2603.06007
 - Documentation: https://docs.masfactory.dev/
+- 项目官网：https://masfactory.dev
 - Demonstration Video: https://www.youtube.com/watch?v=ANynzVfY32k
 - Vibe Graphing 讲解（Discover AI）: https://www.youtube.com/watch?v=QFlQuX_cddk
 

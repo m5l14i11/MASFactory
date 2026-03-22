@@ -41,6 +41,7 @@ Start from intent, generate a graph design, preview and refine it in a visual en
 
 - Paper: http://arxiv.org/abs/2603.06007
 - Documentation: https://docs.masfactory.dev/
+- Project Website: https://masfactory.dev
 - Demonstration Video: https://www.youtube.com/watch?v=ANynzVfY32k
 - Vibe Graphing explainer (Discover AI): https://www.youtube.com/watch?v=QFlQuX_cddk
 
