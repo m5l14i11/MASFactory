@@ -216,8 +216,7 @@ print(out["answer"])
 
 **NowWhat** 意为 “Now what are my peers working on?”，是一个面向 AI 研究者与开发者的信息筛选应用。它会每日抓取 AI 领域论文，并基于大模型进行系统化分析与总结，帮助用户快速了解当天值得关注的研究进展。
 
-- 在线体验地址：`https://what.masfactory.dev`
-- Workflow 说明：[`applications/nowwhat/README.md`](applications/nowwhat/README.md)
+- 在线体验地址：https://what.masfactory.dev
 
 <p align="center">
   <img src="applications/nowwhat/assets/nowwhat-preview-zh.png" alt="NowWhat 中文版应用预览" width="980" />
@@ -227,8 +226,7 @@ print(out["answer"])
 
 **OhNoPPT** 是一个面向论文讲解 PPT 制作场景的 **Paper2PPT** 应用。用户只需要上传论文，并描述汇报场景与目标，系统就会在后台启动基于 MASFactory 的多智能体工作流，自动完成从论文理解到 PPT 生成的整套流程。与多数只能导出静态 slides 的产品不同，OhNoPPT 交付的是可以继续用 Office 编辑修改的 `.pptx` 文件。
 
-- 在线体验地址：`https://ppt.masfactory.dev`
-- Workflow 说明：[`applications/ohnoppt/README.md`](applications/ohnoppt/README.md)
+- 在线体验地址：https://ppt.masfactory.dev
 
 <p align="center">
   <img src="applications/ohnoppt/assets/ohnoppt-preview-zh.png" alt="OhNoPPT 中文版应用预览" width="980" />

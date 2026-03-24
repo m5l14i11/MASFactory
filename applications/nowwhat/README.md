@@ -4,7 +4,7 @@ This directory contains the MASFactory-based **NowWhat** daily AI paper digest w
 
 ## Experience
 
-- Hosted experience: `https://what.masfactory.dev`
+- Hosted experience: https://what.masfactory.dev
 
 ## Overview
 

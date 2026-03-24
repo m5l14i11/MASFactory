@@ -4,7 +4,7 @@ This directory contains the MASFactory-based **OhNoPPT** paper-to-deck pipeline.
 
 ## Experience
 
-- Hosted experience: `https://ppt.masfactory.dev`
+- Hosted experience: https://ppt.masfactory.dev
 
 ## Overview
 

@@ -218,8 +218,7 @@ Below are two example applications built with MASFactory for two common scenario
 
 **NowWhat** stands for "Now what are my peers working on?" It is an information-filtering app for AI researchers and developers. The service turns a daily stream of AI papers into a structured briefing, helping users quickly understand which papers are worth reading and what signals matter most.
 
-- Hosted experience: `https://what.masfactory.dev`
-- Workflow source: [`applications/nowwhat/README.md`](applications/nowwhat/README.md)
+- Hosted experience: https://what.masfactory.dev
 
 <p align="center">
   <img src="applications/nowwhat/assets/nowwhat-preview-en.png" alt="NowWhat English product preview" width="980" />
@@ -229,8 +228,7 @@ Below are two example applications built with MASFactory for two common scenario
 
 **OhNoPPT** is a **Paper2PPT** application for research-paper presentations. Users upload a paper and describe the presentation goal, and MASFactory orchestrates the full process from paper understanding to deck generation. Unlike many slide-generation tools that stop at static exports, OhNoPPT delivers a genuinely editable `.pptx` file.
 
-- Hosted experience: `https://ppt.masfactory.dev`
-- Workflow source: [`applications/ohnoppt/README.md`](applications/ohnoppt/README.md)
+- Hosted experience: https://ppt.masfactory.dev
 
 <p align="center">
   <img src="applications/ohnoppt/assets/ohnoppt-preview-en.png" alt="OhNoPPT English product preview" width="980" />
