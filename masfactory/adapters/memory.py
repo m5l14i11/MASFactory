@@ -7,6 +7,7 @@ import numpy as np
 
 from .context.provider import ContextProvider, HistoryProvider
 from .context.types import ContextBlock, ContextQuery
+from masfactory.core.multimodal import MediaMessageBlock, TextMessageBlock, iter_media_message_blocks
 
 
 class Memory(ContextProvider, ABC):
@@ -30,11 +31,11 @@ class Memory(ContextProvider, ABC):
         return self._context_label
 
     @abstractmethod
-    def insert(self, key: str, value: str):
+    def insert(self, key: str, value: object):
         """Insert a new item into the memory."""
 
     @abstractmethod
-    def update(self, key: str, value: str):
+    def update(self, key: str, value: object):
         """Update an existing item in the memory."""
 
     @abstractmethod
@@ -56,13 +57,21 @@ class HistoryMemory(Memory, HistoryProvider):
 
     supports_active: bool = False
 
-    def __init__(self, top_k: int = 10, memory_size: int = 1000, context_label: str = "CONVERSATION_HISTORY"):
+    def __init__(
+        self,
+        top_k: int = 10,
+        memory_size: int = 1000,
+        context_label: str = "CONVERSATION_HISTORY",
+        *,
+        merge_historical_media: bool = True,
+    ):
         super().__init__(context_label, passive=False, active=False)
         self._memory: list[dict] = []
         self._memory_size = int(memory_size)
         self._top_k = int(top_k)
+        self._merge_historical_media = bool(merge_historical_media)
 
-    def insert(self, role: str, response: str):
+    def insert(self, role: str, response: object):
         if self._memory_size > 0 and len(self._memory) >= self._memory_size:
             self._memory.pop(0)
         self._memory.append({"role": role, "content": response})
@@ -72,19 +81,57 @@ class HistoryMemory(Memory, HistoryProvider):
         return []
 
     def get_messages(self, query: ContextQuery | None = None, *, top_k: int = -1) -> list[dict]:
+        del query
         if top_k == -1:
             top_k = self._top_k
         if top_k == 0:
-            # 0 means "as many as possible" (bounded by memory_size when configured).
             if self._memory_size and self._memory_size > 0:
                 top_k = min(self._memory_size, len(self._memory))
             else:
                 top_k = len(self._memory)
         if top_k <= 0:
             return []
-        return [dict(item) for item in self._memory[-top_k:]]
+        messages = [dict(item) for item in self._memory[-top_k:]]
+        if not self._merge_historical_media:
+            return messages
+        return self._merge_media_messages(messages)
 
-    def update(self, key: str, value: str):
+    def _merge_media_messages(self, messages: list[dict]) -> list[dict]:
+        fingerprint_to_tag: dict[str, str] = {}
+        merged_messages: list[dict] = []
+        for message in messages:
+            cloned = dict(message)
+            content = cloned.get("content")
+            if not isinstance(content, list):
+                merged_messages.append(cloned)
+                continue
+            rewritten_content: list[object] = []
+            seen_in_message: set[str] = set()
+            for block in content:
+                if not isinstance(block, MediaMessageBlock):
+                    rewritten_content.append(block)
+                    continue
+                fingerprint = self._media_fingerprint_key(block)
+                canonical_tag = fingerprint_to_tag.get(fingerprint)
+                if canonical_tag is None:
+                    fingerprint_to_tag[fingerprint] = block.tag
+                    rewritten_content.append(block)
+                    seen_in_message.add(fingerprint)
+                    continue
+                if canonical_tag == block.tag and fingerprint not in seen_in_message:
+                    rewritten_content.append(TextMessageBlock(text=canonical_tag))
+                    seen_in_message.add(fingerprint)
+                    continue
+                rewritten_content.append(TextMessageBlock(text=canonical_tag))
+                seen_in_message.add(fingerprint)
+            cloned["content"] = rewritten_content
+            merged_messages.append(cloned)
+        return merged_messages
+
+    def _media_fingerprint_key(self, block: MediaMessageBlock) -> str:
+        return block.fingerprint
+
+    def update(self, key: str, value: object):
         pass
 
     def delete(self, key: str, index: int = -1):
@@ -122,21 +169,23 @@ class VectorMemory(Memory):
         self._memory: dict[str, str] = {}
         self._embeddings: dict[str, np.ndarray] = {}
 
-    def insert(self, key: str, value: str):
+    def insert(self, key: str, value: object):
         if self._memory_size > 0 and len(self._memory) >= self._memory_size:
             oldest_key = next(iter(self._memory))
             self._memory.pop(oldest_key, None)
             self._embeddings.pop(oldest_key, None)
 
-        self._memory[key] = value
-        content_for_embedding = f"{key}: {value}"
+        text_value = str(value)
+        self._memory[key] = text_value
+        content_for_embedding = f"{key}: {text_value}"
         self._embeddings[key] = self._embedding_function(content_for_embedding)
 
-    def update(self, key: str, value: str):
+    def update(self, key: str, value: object):
         if key not in self._memory:
             return
-        self._memory[key] = value
-        content_for_embedding = f"{key}: {value}"
+        text_value = str(value)
+        self._memory[key] = text_value
+        content_for_embedding = f"{key}: {text_value}"
         self._embeddings[key] = self._embedding_function(content_for_embedding)
 
     def delete(self, key: str, index: int = -1):
@@ -189,4 +238,3 @@ class VectorMemory(Memory):
         if norm1 == 0 or norm2 == 0:
             return 0.0
         return float(np.dot(vec1, vec2) / (norm1 * norm2))
-

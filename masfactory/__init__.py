@@ -1,4 +1,4 @@
-from .adapters.model import OpenAIModel,Model,AnthropicModel,GeminiModel
+from .adapters.model import OpenAIModel, LegacyOpenAIModel, Model, AnthropicModel, GeminiModel
 from .components.graphs.base_graph import BaseGraph
 from .components.graphs.graph import Graph
 from .components.controls.logic_switch import LogicSwitch
@@ -52,7 +52,8 @@ from .utils.embedding import OpenAIEmbedder, SentenceTransformerEmbedder, Anthro
 from .utils.hook import masf_hook
 from .components.vibe.vibe_graph import VibeGraph
 from .skills import Skill, SkillSet, load_skill, load_skills
+from .core.multimodal import FieldSpec, ImageAsset, PdfAsset, FieldModality
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
-__all__ = ["Graph", "RootGraph", "LogicSwitch", "AgentSwitch", "BaseSwitch", "Loop", "OpenAIModel", "Agent", "SingleAgent", "Node", "Edge", "NodeTemplate", "Shared", "Factory", "template_defaults", "template_overrides", "template_defaults_for", "template_overrides_for", "JsonMessageFormatter", "TaggedFieldMessageFormatter", "MessageFormatter", "CustomNode", "HistoryMemory", "Memory", "Model","AnthropicModel","GeminiModel","DynamicAgent","BaseGraph","HookManager","HookStage","VerticalDecisionGraph","VerticalSolverFirstDecisionGraph","VerticalGraph","AdjacencyMatrixGraph","HorizontalGraph","BrainstormingGraph","HubGraph","MeshGraph","Retrieval","VectorRetriever","FileSystemRetriever","SimpleKeywordRetriever","InstructorAssistantGraph","OpenAIEmbedder","SentenceTransformerEmbedder","AnthropicEmbedder","HybridEmbedder","SimpleEmbedder","BaseEmbedder","VectorMemory","masf_hook", "LenientJsonMessageFormatter", "MarkdownMessageFormatter", "ParagraphMessageFormatter", "TwinsFieldTextFormatter", "PingPongGraph", "HumanChat", "HumanFileEdit", "HumanChatVisual", "HumanFileEditVisual", "VibeGraph", "Skill", "SkillSet", "load_skill", "load_skills"]
+__all__ = ["Graph", "RootGraph", "LogicSwitch", "AgentSwitch", "BaseSwitch", "Loop", "OpenAIModel", "LegacyOpenAIModel", "Agent", "SingleAgent", "Node", "Edge", "NodeTemplate", "Shared", "Factory", "template_defaults", "template_overrides", "template_defaults_for", "template_overrides_for", "JsonMessageFormatter", "TaggedFieldMessageFormatter", "MessageFormatter", "CustomNode", "HistoryMemory", "Memory", "Model","AnthropicModel","GeminiModel","DynamicAgent","BaseGraph","HookManager","HookStage","VerticalDecisionGraph","VerticalSolverFirstDecisionGraph","VerticalGraph","AdjacencyMatrixGraph","HorizontalGraph","BrainstormingGraph","HubGraph","MeshGraph","Retrieval","VectorRetriever","FileSystemRetriever","SimpleKeywordRetriever","InstructorAssistantGraph","OpenAIEmbedder","SentenceTransformerEmbedder","AnthropicEmbedder","HybridEmbedder","SimpleEmbedder","BaseEmbedder","VectorMemory","masf_hook", "LenientJsonMessageFormatter", "MarkdownMessageFormatter", "ParagraphMessageFormatter", "TwinsFieldTextFormatter", "PingPongGraph", "HumanChat", "HumanFileEdit", "HumanChatVisual", "HumanFileEditVisual", "VibeGraph", "Skill", "SkillSet", "load_skill", "load_skills", "FieldSpec", "FieldModality", "ImageAsset", "PdfAsset"]

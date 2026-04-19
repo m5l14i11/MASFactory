@@ -109,8 +109,42 @@ paper_summary, review_writing = load_skills([
 - 每个 Skill 都会贡献自己的 `SKILL.md` 主体内容
 - 模板、示例等 supporting files 也可能以有边界的方式被注入
 - skill 元数据会被保留，用于调试和 visualizer 序列化
+- 如果 `SKILL.md` frontmatter 声明了 `media:`，这些静态资源会和 skill 指令一起挂到 system 侧，而不是注入到 user message
 
 因此 Skill 仍然是轻量能力包：模型、记忆、检索、工具执行和运行时身份仍然归 Agent 所有。
+
+### 5.1）frontmatter 中声明 Skill media
+
+Skill 包可以在 `SKILL.md` frontmatter 中声明静态 media：
+
+```md
+---
+name: receipt-skill
+description: 按参考指南校验票据
+media:
+  - type: image
+    path: guide.png
+    mime_type: image/png
+  - type: pdf
+    path: policy.pdf
+---
+请把当前票据与参考图片、政策 PDF 一起比对。
+```
+
+每个 media 条目支持这些字段：
+
+- `type`：`image` 或 `pdf`
+- `path` / `url` / `file_id` / `data`：媒体来源
+- `source_kind`：可选，显式指定来源类型
+- `mime_type`：图片可选
+- `filename`：可选显示文件名
+
+这些 skill media 属于静态 directive 附件：
+
+- 它们和 skill 文本一起留在 system 侧
+- 不会和聊天历史做去重
+- 不受 `reuse_attachment_tags` 控制
+- 对于无法承载 system-side media 的模型适配器，应抛出明确错误
 
 ---
 

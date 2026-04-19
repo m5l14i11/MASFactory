@@ -44,7 +44,7 @@ For how prompts/messages are assembled (payload fields, formatters, output const
 
 ### 1.1 Example: conversation history (HistoryMemory)
 
-`HistoryMemory` is a special memory type: it does not inject blocks into `CONTEXT`. Instead, it contributes **chat messages** (history) inserted into the model `messages` list.
+`HistoryMemory` is a special memory type: it does not inject blocks into `CONTEXT`. Instead, it contributes **chat messages** (history) inserted into the model `messages` list. An `Agent` may attach at most one `HistoryProvider`-backed memory. `HistoryMemory` also owns its own media-history merge behavior; this is configured on the memory instance, not via `Agent`. When `merge_historical_media=True`, repeated historical attachments are returned as indexed tag references instead of duplicate media blocks.
 
 ```python
 from masfactory import Agent, HistoryMemory

@@ -7,8 +7,22 @@ import json
 import threading
 from typing import Any
 
+from masfactory.core.multimodal import MediaAsset, MediaMessageBlock, TextMessageBlock, media_value_to_prompt_text
+
 def _coerce_to_basic_types(value: Any) -> Any:
     """Convert common rich objects to JSON-serializable primitives."""
+    if isinstance(value, MediaAsset):
+        return value.prompt_summary()
+    if isinstance(value, MediaMessageBlock):
+        return {
+            "type": value.type,
+            "field_name": value.field_name,
+            "tag": value.tag,
+            "description": value.description,
+            "summary": value.asset.prompt_summary(),
+        }
+    if isinstance(value, TextMessageBlock):
+        return value.text
     if is_dataclass(value) and not isinstance(value, type):
         return asdict(value)
     if hasattr(value, "model_dump") and callable(getattr(value, "model_dump")):
@@ -26,6 +40,16 @@ def _json_default(value: Any) -> str:
 
 def _default_render_value(value: Any) -> str:
     """Render a value as stable text for prompts."""
+    if isinstance(value, MediaAsset):
+        return value.prompt_summary()
+    if isinstance(value, MediaMessageBlock):
+        return value.tag
+    if isinstance(value, TextMessageBlock):
+        return value.text
+    try:
+        return media_value_to_prompt_text(value)
+    except Exception:
+        pass
     value = _coerce_to_basic_types(value)
     if isinstance(value, str):
         return value

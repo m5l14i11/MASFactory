@@ -5,6 +5,7 @@ from masfactory.utils.hook import HookManager
 from masfactory.utils.selector import Selector, build_selector
 
 from .gate import Gate
+from .multimodal import FieldSpec, normalize_field_specs, validate_field_value
 if TYPE_CHECKING:
     from .node import Node
 
@@ -102,6 +103,9 @@ class Edge:
         if missing_keys:
             raise KeyError(f"Missing keys {missing_keys} for {self}")
 
+        for key, spec in self.field_specs.items():
+            validate_field_value(spec, message[key])
+
         self._message = {key: message[key] for key in self.keys}
         self._hooks.dispatch(self.Hook.SEND_MESSAGE,self._sender,self._receiver, message)
 
@@ -130,6 +134,10 @@ class Edge:
     @property
     def keys(self) -> dict[str,dict|str]:
         return self._keys
+
+    @property
+    def field_specs(self) -> dict[str, FieldSpec]:
+        return normalize_field_specs(self._keys)
 
     @property
     def is_congested(self) -> bool:

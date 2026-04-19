@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from enum import Enum
 import json
 
@@ -14,6 +15,20 @@ class ModelResponseType(Enum):
     TOOL_CALL = "tool_call"
 
 
+@dataclass(frozen=True, slots=True)
+class ModelCapabilities:
+    """Provider capability declaration used for early multimodal validation."""
+
+    image_input: bool = False
+    pdf_input: bool = False
+    image_sources: frozenset[str] = field(
+        default_factory=lambda: frozenset({"base64", "bytes", "path", "url", "file_id"})
+    )
+    pdf_sources: frozenset[str] = field(
+        default_factory=lambda: frozenset({"base64", "bytes", "path", "url", "file_id"})
+    )
+
+
 class Model(ABC):
     """Base interface for model adapters.
 
@@ -23,7 +38,14 @@ class Model(ABC):
 
     __node_template_scope__ = "shared"
 
-    def __init__(self, model_name: str | None = None, invoke_settings: dict | None = None, *args, **kwargs):
+    def __init__(
+        self,
+        model_name: str | None = None,
+        invoke_settings: dict | None = None,
+        *args,
+        capabilities: ModelCapabilities | None = None,
+        **kwargs,
+    ):
         """Create a model adapter.
 
         Args:
@@ -37,6 +59,7 @@ class Model(ABC):
         self._client = None
         self._default_invoke_settings = invoke_settings
         self._settings_mapping = {}
+        self._capabilities = capabilities or ModelCapabilities()
         self._settings_default = {
             "temperature": {
                 "name": "temperature",
@@ -164,6 +187,10 @@ class Model(ABC):
         return self._description
 
     @property
+    def capabilities(self) -> ModelCapabilities:
+        return self._capabilities
+
+    @property
     def token_tracker(self) -> TokenUsageTracker:
         return self._token_tracker
 
@@ -188,7 +215,7 @@ class Model(ABC):
             A dict with parsed response fields. Adapters commonly return:
             - `type`: `ModelResponseType.CONTENT` or `ModelResponseType.TOOL_CALL`
             - `content`: text content or tool call payloads
-            - `followup_messages`: optional provider-normalized chat messages to append before tool results
+            - `assistant_message`: optional provider-normalized assistant message to append before tool results
         """
         raise NotImplementedError("invoke method is not implemented")
 
@@ -211,4 +238,4 @@ class Model(ABC):
         raise NotImplementedError(f"{self.__class__.__name__} does not support image generation")
 
 
-__all__ = ["Model", "ModelResponseType"]
+__all__ = ["Model", "ModelCapabilities", "ModelResponseType"]

@@ -50,8 +50,8 @@ To avoid deadlocks or unexpected early exits at runtime, follow these constraint
 ### `SingleAgent`
 Single agent component. An Agent component that can be used independently without relying on any Graph, users can directly instantiate and use it.<br>
 Suitable for quick Q&A, simple tool calls, scripted batch processing and other tasks that do not require complete workflow orchestration.
-- Constructor parameters: `name`, `model`, `instructions`, `prompt_template`?, `tools`?, `memories`?, `model_settings`?, `role_name`? <br>
-  Parameter meanings refer to [Agent](#Agent).
+- Constructor parameters: `name`, `model`, `instructions`, `prompt_template`?, `tools`?, `memories`?, `model_settings`?, `role_name`?, `formatters`?, `skills`?, `attributes`?, `hide_unused_fields`?, `reuse_attachment_tags`? <br>
+  Parameter meanings refer to [Agent](#Agent). `SingleAgent` follows the same memory rule: at most one `HistoryProvider`-backed memory may be attached.
 - Related methods:
     - `invoke`: Parameters include `input` (`dict`); returns `dict`.<br>
     `SingleAgent` uses `dict` for both input and output (parsed/rendered by the configured `MessageFormatter`).
@@ -97,18 +97,19 @@ Loop subgraph, encapsulating iteration control and optional LLM termination judg
 ## Agent Components
 ### `Agent`
 Standard agent node.
-- Constructor parameters: `name`, `model`, `instructions`, `prompt_template`?, `formatters`?, `tools`?, `memories`?, `retrievers`?, `pull_keys`?, `push_keys`?, `model_settings`?, `role_name`?, `hide_unused_fields`?<br>
+- Constructor parameters: `name`, `model`, `instructions`, `prompt_template`?, `formatters`?, `tools`?, `memories`?, `retrievers`?, `pull_keys`?, `push_keys`?, `model_settings`?, `role_name`?, `hide_unused_fields`?, `reuse_attachment_tags`?<br>
     - `name`: Node name for identifying current Agent;<br>
     - `model`: Large model called by Agent, receives a `Model` object, adapted for mainstream LLM APIs. Detailed reference: [Model Adapters](/guide/model_adapter);<br>
     - `instructions`: Instruction information sent to Agent. Receives a string or string list; when it's a list, it will be joined with newline characters into complete instructions. Supports using `{replacement_field}` to embed fields from `in_edges` `keys`, fields from node variables `attributes`, `role_name` into instructions;<br>
     - `prompt_template`: Agent's prompt template (corresponding to user prompt). Supports `str` or `list[str]`; when it's a list, it will be joined with newline characters; can be used in combination with `instructions`; defaults to `None`;<br>
     - `formatters`: Message formatter(s) that define the LLM I/O protocol. Pass a single formatter (used for both in/out) or a list of two formatters `[in, out]`. Defaults to “paragraph-style input + JSON output”.<br>
     - `tools`: List of tool functions available for Agent to call. Function names, parameter names, return value types and docstrings will be automatically added to LLM context by MASFactory, automatically call corresponding tools based on LLM call results, and return results to LLM;<br>
-		- `memories`: Memory adapters (write + read). Except for `HistoryMemory`, memories act as context sources via `get_blocks(...)` (injected into `CONTEXT`), and Agents will `insert(...)` after each step.<br>
+		- `memories`: Memory adapters (write + read). Except for `HistoryMemory`, memories act as context sources via `get_blocks(...)` (injected into `CONTEXT`), and Agents will `insert(...)` after each step. At most one `HistoryProvider`-backed memory may be attached to an Agent; other memory backends are unlimited.<br>
 		- `retrievers`: Read-only RAG / external context sources injected via `get_blocks(...)`. MCP sources can also be plugged in here.<br>
-		- `model_settings`: Additional settings passed to underlying model interface (refer to OpenAI Chat Completions Legacy interface). Supports: `temperature` (float, range [0.0, 2.0]), `top_p` (float, range [0.0, 1.0]), `max_tokens` (positive integer), `stop` (stop words, `str` or `list[str]`). Unlisted keys will be passed as-is to model adapter (if model supports). Example: `{"temperature": 0.7, "top_p": 0.95, "max_tokens": 512, "stop": ["</end>"]}`;<br>
+		- `model_settings`: Additional normalized model settings passed to the adapter. Supports: `temperature` (float, range [0.0, 2.0]), `top_p` (float, range [0.0, 1.0]), `max_tokens` (positive integer), `stop` (stop words, `str` or `list[str]`). Unlisted keys will be passed as-is to the model adapter (if model supports). Example: `{"temperature": 0.7, "top_p": 0.95, "max_tokens": 512, "stop": ["</end>"]}`;<br>
     - `role_name`: Agent's role name. Can use `{role_name}` to insert it into instructions. If `role_name` is not set, `role_name` directly uses the value of `name`.
     - `hide_unused_fields`: If `True`, input fields not consumed by template placeholders will not be appended into the user payload.
+    - `reuse_attachment_tags`: If `True`, same-turn media is deduplicated; when the attached history returns rich media blocks, matching attachments can reuse those existing tags instead of being resent. History-side media indexing/merging remains controlled by the `HistoryMemory` instance, not by `Agent`.
 - Features:
   - Model adaptation: Adapts mainstream model API interfaces.
   - Automatic tool calling: When LLM returns tool calls, automatically execute corresponding tools, backfill results and request LLM again until final content is returned.

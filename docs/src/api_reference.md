@@ -10,7 +10,7 @@ This document provides a complete API reference for the MASFactory framework, in
 :::
 
 ::: info Version Information
-This document corresponds to MASFactory v1.0.1
+This document corresponds to MASFactory v1.0.2
 :::
 
 ## Core Modules
@@ -288,12 +288,14 @@ class Agent(Node):
         tools: list[Callable] | None = None,
         memories: list[Memory] | None = None,
         retrievers: list[Retrieval] | None = None,
+        skills: list[Skill] | None = None,
         pull_keys: dict[str, dict|str] | None = {},
         push_keys: dict[str, dict|str] | None = {},
         model_settings: dict | None = None,
         role_name: str | None = None,
         attributes: dict[str, object] | None = None,
         hide_unused_fields: bool = False,
+        reuse_attachment_tags: bool = True,
     )
 ```
 
@@ -310,7 +312,7 @@ class Agent(Node):
 | `retry_backoff` | `int \| None` | `2` | Exponential backoff base |
 | `prompt_template` | `str \| list[str] \| None` | `None` | Prompt template |
 | `tools` | `list[Callable] \| None` | `None` | List of tool functions |
-| `memories` | `list[Memory] \| None` | `None` | List of memory adapters |
+| `memories` | `list[Memory] \| None` | `None` | List of memory adapters; at most one `HistoryProvider`-backed memory may be attached |
 | `retrievers` | `list[Retrieval] \| None` | `None` | Retrieval adapters (RAG/MCP, etc.) |
 | `skills` | `list[Skill] \| None` | `None` | Explicitly loaded skill packages attached at the directive layer |
 | `pull_keys` | `dict[str,dict|str] \| None` | `{}` | Visible/required node variable keys and descriptions |
@@ -319,6 +321,7 @@ class Agent(Node):
 | `role_name` | `str` | `None` | Role name of the Agent |
 | `attributes` | `dict[str,object] \| None` | `None` | Initial local attributes for the agent |
 | `hide_unused_fields` | `bool` | `False` | Whether to omit unused fields when formatting prompts |
+| `reuse_attachment_tags` | `bool` | `True` | Deduplicate same-turn media; if rich history media blocks are available, matching attachments may reuse those existing tags |
 
 #### Supported model_settings Parameters
 
@@ -771,7 +774,12 @@ class SingleAgent(Agent):
                 memories: list[Memory] | None = None,
                 retrievers: list[Retrieval] | None = None,
                 model_settings: dict | None = None,
-                role_name: str = None)
+                role_name: str = None,
+                formatters: list[MessageFormatter] | MessageFormatter | None = None,
+                skills: list[Skill] | None = None,
+                attributes: dict[str, object] | None = None,
+                hide_unused_fields: bool = False,
+                reuse_attachment_tags: bool = True)
 ```
 
 #### Constructor Parameters
@@ -786,10 +794,15 @@ class SingleAgent(Agent):
 | `retry_delay` | `int` | `1` | Base delay multiplier for exponential backoff retries |
 | `retry_backoff` | `int` | `2` | Exponential backoff base |
 | `tools` | `list[Callable]` | `None` | Available tools list |
-| `memories` | `list[Memory] \| None` | `None` | Memory modules list |
+| `memories` | `list[Memory] \| None` | `None` | Memory modules list; at most one `HistoryProvider`-backed memory may be attached |
 | `retrievers` | `list[Retrieval] \| None` | `None` | Retrieval adapters (RAG/MCP, etc.) |
 | `model_settings` | `dict \| None` | `None` | Model invocation parameters |
 | `role_name` | `str \| None` | `None` | Role name |
+| `formatters` | `list[MessageFormatter] \| MessageFormatter \| None` | `None` | Optional input/output message formatter(s) |
+| `skills` | `list[Skill] \| None` | `None` | Optional loaded skill packages |
+| `attributes` | `dict[str, object] \| None` | `None` | Optional default local attributes |
+| `hide_unused_fields` | `bool` | `False` | Omit unused template fields from the user payload |
+| `reuse_attachment_tags` | `bool` | `True` | Deduplicate same-turn media; if rich history media blocks are available, matching attachments may reuse those existing tags |
 
 #### Features
 
@@ -924,6 +937,7 @@ It owns skill rendering/metadata composition so `Agent` does not need to read sk
 
 - `render_instructions() -> str`: Render the `[Loaded Skills]` block
 - `compose(base_instructions: str) -> str`: Append rendered skills to base instructions
+- `media_assets -> list[MediaAsset]`: Return skill-declared static media assets
 - `metadata() -> list[dict[str, object]]`: Return stable metadata for loaded skills
 
 ### load_skill()
@@ -1203,7 +1217,7 @@ class Model(ABC):
 | Property | Type | Description |
 |------|------|------|
 | `model_name` | `str` | Name of the model (read-only) |
-| `description` | `str` | Description of the model (read-only) |
+| `description` | `object` | Description payload of the model (read-only) |
 
 #### Core Methods
 
@@ -1244,8 +1258,8 @@ Invoke large language model and get response.
 
 ### OpenAIModel Class
 
-::: info OpenAI Model Adapter
-OpenAIModel implements the model adapter for interacting with OpenAI API.
+::: info OpenAI Responses Model Adapter
+`OpenAIModel` uses the OpenAI Responses API and supports multimodal inputs including PDF.
 :::
 
 ```python
@@ -1293,6 +1307,24 @@ model = OpenAIModel(
 
 ---
 
+### LegacyOpenAIModel Class
+
+::: info OpenAI Chat Completions Model Adapter
+`LegacyOpenAIModel` uses the Chat Completions API for OpenAI-compatible endpoints and does not support PDF input.
+:::
+
+```python
+class LegacyOpenAIModel(Model):
+    def __init__(self,
+                model_name: str,
+                api_key: str,
+                base_url: str | None = None,
+                invoke_settings: dict | None = None,
+                **kwargs)
+```
+
+---
+
 ### AnthropicModel Class
 
 ::: info Anthropic Model Adapter
@@ -1324,12 +1356,14 @@ class AnthropicModel(Model):
 - `claude-3-sonnet-20240229`
 - `claude-3-haiku-20240307`
 
+> These examples are illustrative, not an exhaustive or current provider catalog.
+
 ---
 
 ### GeminiModel Class
 
 ::: info Google Gemini Model Adapter
-GeminiModel implements the model adapter for interacting with Google Gemini API.
+GeminiModel implements the model adapter for interacting with Google Gemini via the `google-genai` SDK.
 :::
 
 ```python
@@ -1357,6 +1391,8 @@ class GeminiModel(Model):
 - `gemini-pro-vision`
 - `gemini-1.5-pro`
 
+> These examples are illustrative, not an exhaustive or current provider catalog.
+
 ---
 
 ## Memory System
@@ -1372,8 +1408,8 @@ via `get_blocks(...)`, which Agents inject into the user payload as a `CONTEXT` 
 ```python
 class Memory(ContextProvider, ABC):
     def __init__(self, context_label: str, *, passive: bool = True, active: bool = False)
-    def insert(self, key: str, value: str)
-    def update(self, key: str, value: str)
+    def insert(self, key: str, value: object)
+    def update(self, key: str, value: object)
     def delete(self, key: str, index: int = -1)
     def reset(self)
     def get_blocks(self, query: ContextQuery, *, top_k: int = 8) -> list[ContextBlock]
@@ -1394,12 +1430,20 @@ For details, see: [`/guide/context_adapters`](/guide/context_adapters).
 ::: info HistoryMemory
 `HistoryMemory` stores chat history and injects it as chat-style `messages` (between system and user).  
 It does not emit `ContextBlock`s (`get_blocks(...)` always returns empty).
+An `Agent` may attach at most one `HistoryProvider`-backed memory. It may optionally merge duplicate historical media when returning `get_messages(...)`; this behavior is controlled by `merge_historical_media` on the memory itself. When enabled, repeated attachments are returned as indexed tag references instead of duplicate media blocks.
 :::
 
 ```python
 class HistoryMemory(Memory, HistoryProvider):
-    def __init__(self, top_k: int = 10, memory_size: int = 1000, context_label: str = "CONVERSATION_HISTORY")
-    def insert(self, role: str, response: str)
+    def __init__(
+        self,
+        top_k: int = 10,
+        memory_size: int = 1000,
+        context_label: str = "CONVERSATION_HISTORY",
+        *,
+        merge_historical_media: bool = True,
+    )
+    def insert(self, role: str, response: object)
     def get_messages(self, query: ContextQuery | None = None, *, top_k: int = -1) -> list[dict]
 ```
 
@@ -1420,6 +1464,9 @@ memory.insert("assistant", "Sure.")
 
 print(memory.get_messages(top_k=2))
 ```
+
+> When `HistoryMemory` is attached via `Agent(memories=[...])`, Agent automatically inserts the
+> returned `get_messages(...)` items into `messages` between system and user.
 
 ---
 

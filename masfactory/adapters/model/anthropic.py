@@ -7,33 +7,75 @@ try:
 except ImportError:  # pragma: no cover
     Anthropic = None  # type: ignore
 
-from .base import Model, ModelResponseType
-from ..token_usage_tracker import TokenUsageTracker
+from masfactory.adapters.token_usage_tracker import TokenUsageTracker
+from masfactory.core.multimodal import FieldModality, MediaMessageBlock, TextMessageBlock
+
+from .base import Model, ModelCapabilities, ModelResponseType
+from .common import (
+    assistant_message_from_tool_calls,
+    asset_to_base64,
+    build_capabilities,
+    canonical_tool_calls,
+    content_blocks,
+    content_to_text,
+    validate_media_capability,
+)
 
 
-def _normalize_anthropic_tool_choice(tool_choice: str | dict | None) -> dict | None:
-    if tool_choice is None:
-        return None
-    if isinstance(tool_choice, dict):
-        return tool_choice
-
-    normalized = tool_choice.strip().lower()
-    if normalized == "auto":
-        return {"type": "auto"}
-    if normalized == "required":
-        return {"type": "any"}
-    if normalized == "none":
-        return {"type": "none"}
-    raise ValueError("Anthropic tool_choice must be 'auto', 'required', 'none', or a provider-native dict.")
-
-
-def _normalize_anthropic_tool_result(content: object) -> object:
-    if isinstance(content, str):
-        return content
-    try:
-        return json.dumps(content, ensure_ascii=False)
-    except Exception:
-        return str(content)
+def _encode_anthropic_blocks(
+    content: object,
+    *,
+    capabilities: ModelCapabilities,
+    model_name: str,
+) -> list[dict]:
+    blocks: list[dict] = []
+    for block in content_blocks(content):
+        if isinstance(block, str):
+            blocks.append({"type": "text", "text": block})
+            continue
+        if isinstance(block, TextMessageBlock):
+            blocks.append({"type": "text", "text": block.text})
+            continue
+        if isinstance(block, MediaMessageBlock):
+            validate_media_capability(
+                provider="Anthropic",
+                model_name=model_name,
+                capabilities=capabilities,
+                block=block,
+            )
+            asset = block.asset
+            if asset.modality == FieldModality.IMAGE:
+                if asset.source_kind == "url":
+                    blocks.append({"type": "image", "source": {"type": "url", "url": str(asset.value)}})
+                else:
+                    blocks.append(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": asset.mime_type,
+                                "data": asset_to_base64(asset),
+                            },
+                        }
+                    )
+                continue
+            if asset.modality == FieldModality.PDF:
+                if asset.source_kind == "url":
+                    blocks.append({"type": "document", "source": {"type": "url", "url": str(asset.value)}})
+                else:
+                    blocks.append(
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "base64",
+                                "media_type": asset.mime_type,
+                                "data": asset_to_base64(asset),
+                            },
+                        }
+                    )
+                continue
+        blocks.append({"type": "text", "text": str(block)})
+    return blocks
 
 
 class AnthropicModel(Model):
@@ -45,10 +87,19 @@ class AnthropicModel(Model):
         api_key: str,
         base_url: str | None = None,
         invoke_settings: dict | None = None,
+        capability_overrides: dict | None = None,
         **kwargs,
     ):
-        """Create an Anthropic model adapter."""
-        super().__init__(model_name, invoke_settings, **kwargs)
+        capabilities = build_capabilities(
+            ModelCapabilities(
+                image_input=True,
+                pdf_input=True,
+                image_sources=frozenset({"base64", "bytes", "path", "url"}),
+                pdf_sources=frozenset({"base64", "bytes", "path", "url"}),
+            ),
+            capability_overrides,
+        )
+        super().__init__(model_name, invoke_settings, capabilities=capabilities, **kwargs)
 
         if model_name is None or model_name == "":
             raise ValueError("Anthropic model_name is required.")
@@ -59,17 +110,10 @@ class AnthropicModel(Model):
                 "Anthropic support requires the 'anthropic' package. "
                 "Please install it with: pip install anthropic"
             )
-        self._client = Anthropic(
-            api_key=api_key,
-            base_url=base_url,
-            **kwargs,
-        )
+
+        self._client = Anthropic(api_key=api_key, base_url=base_url, **kwargs)
         self._model_name = model_name
-        self._token_tracker = TokenUsageTracker(
-            model_name=model_name,
-            api_key=api_key,
-            base_url=base_url,
-        )
+        self._token_tracker = TokenUsageTracker(model_name=model_name, api_key=api_key, base_url=base_url)
         try:
             model_info = self._client.models.retrieve(model_name)
             if hasattr(model_info, "model_dump"):
@@ -80,41 +124,27 @@ class AnthropicModel(Model):
                 self._description = dict(model_info)
         except Exception:
             self._description = {"id": model_name, "object": "model"}
+
         self._settings_mapping = {
-            "temperature": {
-                "name": "temperature",
-                "type": float,
-                "section": [0.0, 1.0],
-            },
-            "max_tokens": {
-                "name": "max_tokens",
-                "type": int,
-            },
-            "top_p": {
-                "name": "top_p",
-                "type": float,
-                "section": [0.0, 1.0],
-            },
-            "stop": {
-                "name": "stop",
-                "type": list[str],
-            },
-            "tool_choice": {
-                "name": "tool_choice",
-                "type": (str, dict),
-            },
+            "temperature": {"name": "temperature", "type": float, "section": [0.0, 1.0]},
+            "max_tokens": {"name": "max_tokens", "type": int},
+            "top_p": {"name": "top_p", "type": float, "section": [0.0, 1.0]},
+            "stop": {"name": "stop", "type": list[str]},
+            "tool_choice": {"name": "tool_choice", "type": dict},
         }
 
     def _parse_response(self, response) -> dict:
-        result = {}
+        result: dict = {}
+        assistant_blocks: list[object] = []
         if hasattr(response, "content") and any(getattr(block, "type", None) == "tool_use" for block in response.content):
-            result["type"] = ModelResponseType.TOOL_CALL
             tool_calls: list[dict] = []
-            followup_content: list[dict] = []
+            result["type"] = ModelResponseType.TOOL_CALL
             for block in response.content:
                 block_type = getattr(block, "type", None)
                 if block_type == "text":
-                    followup_content.append({"type": "text", "text": getattr(block, "text", "")})
+                    text = getattr(block, "text", None)
+                    if text:
+                        assistant_blocks.append(TextMessageBlock(text=text))
                     continue
                 if block_type != "tool_use":
                     continue
@@ -131,16 +161,9 @@ class AnthropicModel(Model):
                         "arguments": args if args is not None else {},
                     }
                 )
-                followup_content.append(
-                    {
-                        "type": "tool_use",
-                        "id": getattr(block, "id", None),
-                        "name": getattr(block, "name", None),
-                        "input": args if args is not None else {},
-                    }
-                )
             result["content"] = tool_calls
-            result["followup_messages"] = [{"role": "assistant", "content": followup_content}]
+            assistant_message_content: object = assistant_blocks if assistant_blocks else ""
+            result["assistant_message"] = assistant_message_from_tool_calls(tool_calls, assistant_message_content)
         elif hasattr(response, "content") and any(getattr(block, "type", None) == "text" for block in response.content):
             result["type"] = ModelResponseType.CONTENT
             text_content = ""
@@ -156,7 +179,6 @@ class AnthropicModel(Model):
                 input_usage=response.usage.input_tokens,
                 output_usage=response.usage.output_tokens,
             )
-
         return result
 
     def invoke(
@@ -167,35 +189,70 @@ class AnthropicModel(Model):
         invoke_settings: dict | None = None,
         **kwargs,
     ) -> dict:
-        """Invoke the Anthropic messages API."""
-        system_message = None
-        anthropic_messages = []
+        del invoke_settings
+        system_parts: list[str] = []
+        anthropic_messages: list[dict] = []
 
         for message in messages:
-            if message["role"] == "system":
-                system_message = message["content"]
-            elif message["role"] == "tool":
-                tool_call_id = message.get("tool_call_id")
-                tool_result_content = _normalize_anthropic_tool_result(message.get("content"))
+            role = message.get("role")
+            content = message.get("content")
+            if role == "system":
+                if any(isinstance(block, MediaMessageBlock) for block in content_blocks(content)):
+                    raise ValueError(
+                        "AnthropicModel does not support system-side media content. "
+                        "Use a text-only system prompt or switch to a model adapter that supports it."
+                    )
+                system_parts.append(content_to_text(content))
+                continue
+            if role == "tool":
+                tool_result_content = _encode_anthropic_blocks(
+                    content,
+                    capabilities=self.capabilities,
+                    model_name=self.model_name,
+                )
                 anthropic_messages.append(
                     {
                         "role": "user",
                         "content": [
                             {
                                 "type": "tool_result",
-                                "tool_use_id": tool_call_id,
-                                "content": tool_result_content,
+                                "tool_use_id": message.get("tool_call_id"),
+                                "content": tool_result_content if tool_result_content else "",
                             }
                         ],
                     }
                 )
-            else:
-                anthropic_messages.append(
-                    {
-                        "role": message["role"],
-                        "content": message["content"],
-                    }
+                continue
+
+            tool_calls = canonical_tool_calls(message)
+            if role == "assistant" and tool_calls:
+                assistant_blocks = _encode_anthropic_blocks(
+                    content,
+                    capabilities=self.capabilities,
+                    model_name=self.model_name,
                 )
+                for tool_call in tool_calls:
+                    assistant_blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": tool_call.get("id"),
+                            "name": tool_call.get("name"),
+                            "input": tool_call.get("arguments", {}),
+                        }
+                    )
+                anthropic_messages.append({"role": "assistant", "content": assistant_blocks})
+                continue
+
+            anthropic_messages.append(
+                {
+                    "role": role,
+                    "content": _encode_anthropic_blocks(
+                        content,
+                        capabilities=self.capabilities,
+                        model_name=self.model_name,
+                    ),
+                }
+            )
 
         anthropic_tools = []
         if tools:
@@ -208,20 +265,14 @@ class AnthropicModel(Model):
                     }
                 )
 
-        parsed_settings = self._parse_settings(settings)
-        tool_choice = _normalize_anthropic_tool_choice(parsed_settings.pop("tool_choice", None))
-        if tool_choice is not None and anthropic_tools:
-            parsed_settings["tool_choice"] = tool_choice
-
         response = self._client.messages.create(
             model=self.model_name,
             messages=anthropic_messages,
-            system=system_message,
+            system="\n\n".join(part for part in system_parts if part) or None,
             tools=anthropic_tools if anthropic_tools else None,
-            **parsed_settings,
+            **self._parse_settings(settings),
             **kwargs,
         )
-
         return self._parse_response(response)
 
     def generate_images(
@@ -236,11 +287,8 @@ class AnthropicModel(Model):
         user: str = None,
         **kwargs,
     ) -> list[dict]:
-        """Image generation is not supported for Anthropic models."""
+        del prompt, model, n, quality, response_format, size, style, user, kwargs
         raise NotImplementedError(
             "Anthropic models do not support image generation. "
             "Please use OpenAI (DALL-E) or Google (Imagen) for image generation."
         )
-
-
-__all__ = ["AnthropicModel"]

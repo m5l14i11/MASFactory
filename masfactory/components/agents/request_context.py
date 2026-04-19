@@ -5,7 +5,8 @@ from dataclasses import asdict, dataclass, replace
 from typing import Callable
 
 from masfactory.adapters.context import ContextComposer, ContextQuery
-from masfactory.adapters.memory import HistoryMemory, Memory
+from masfactory.adapters.context.provider import HistoryProvider
+from masfactory.adapters.memory import Memory
 from masfactory.adapters.retrieval import Retrieval
 from masfactory.adapters.tool_adapter import ToolAdapter
 from masfactory.core.message import MessageFormatter
@@ -15,7 +16,11 @@ from masfactory.core.message import MessageFormatter
 class RequestContext:
     system_prompt: str
     user_prompt: str
+    user_payload: dict
+    user_message_content: object
     messages: list[dict]
+    history_messages: list[dict]
+    selected_provider_blocks: list[tuple[str, list[object]]]
     tool_adapter: ToolAdapter | None
     context_query: ContextQuery | None
     active_context_providers: list[object]
@@ -35,11 +40,14 @@ class RequestAssembler:
         output_keys_prompt_factory: Callable[[], dict],
         context_query_builder: Callable[[dict[str, object], dict], str],
         memories: list[Memory],
-        history_memories: list[HistoryMemory],
+        history_memories: list[HistoryProvider],
         retrievers: list[Retrieval],
         user_tools: list[Callable],
         context_tool_renderer,
         user_payload_factory: Callable[[], dict],
+        user_payload_builder: Callable[[list[dict], list[tuple[str, list[object]]], dict[str, object]], dict] | None = None,
+        system_message_builder: Callable[[str], object] | None = None,
+        user_message_builder: Callable[[str], object] | None = None,
     ):
         self._name = name
         self._formatter = formatter
@@ -51,6 +59,9 @@ class RequestAssembler:
         self._user_tools = user_tools
         self._context_tool_renderer = context_tool_renderer
         self._user_payload_factory = user_payload_factory
+        self._user_payload_builder = user_payload_builder
+        self._system_message_builder = system_message_builder
+        self._user_message_builder = user_message_builder
 
     def assemble(
         self,
@@ -62,9 +73,9 @@ class RequestAssembler:
     ) -> RequestContext:
         system_prompt = self._formatter.dump(system_payload)
 
-        user_payload = dict(self._user_payload_factory())
+        initial_user_payload = dict(self._user_payload_factory())
 
-        query_text = self._context_query_builder(input_dict, user_payload)
+        query_text = self._context_query_builder(input_dict, initial_user_payload)
         base_query = ContextQuery(
             query_text=query_text,
             inputs=context_knowledges,
@@ -95,7 +106,14 @@ class RequestAssembler:
             node_name=self._name,
             messages=history_messages,
         )
-        user_payload = composer.inject_user_payload(user_payload, query)
+        provider_blocks = composer.collect_provider_blocks(query, top_k=8)
+        selected_provider_blocks = composer.policy.select(provider_blocks, top_k=8)
+
+        if self._user_payload_builder is not None:
+            user_payload = dict(self._user_payload_builder(history_messages, selected_provider_blocks, input_dict))
+        else:
+            user_payload = initial_user_payload
+        user_payload = composer.renderer.inject(user_payload, selected_provider_blocks)
 
         base_labels: list[str] = []
         for provider in active_providers:
@@ -178,16 +196,22 @@ class RequestAssembler:
 
         tool_adapter = ToolAdapter(tools) if tools else None
         user_prompt = self._formatter.dump(user_payload)
+        system_message_content = self._system_message_builder(system_prompt) if self._system_message_builder else system_prompt
+        user_message_content = self._user_message_builder(user_prompt) if self._user_message_builder else user_prompt
         messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": system_message_content},
             *history_messages,
-            {"role": "user", "content": user_prompt},
+            {"role": "user", "content": user_message_content},
         ]
 
         return RequestContext(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
+            user_payload=user_payload,
+            user_message_content=user_message_content,
             messages=messages,
+            history_messages=history_messages,
+            selected_provider_blocks=selected_provider_blocks,
             tool_adapter=tool_adapter,
             context_query=query,
             active_context_providers=active_providers,

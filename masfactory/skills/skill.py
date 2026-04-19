@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from masfactory.core.multimodal import MediaAsset, coerce_media_assets
+
 _SKILL_TEXT_EXTENSIONS = {".md", ".markdown", ".txt"}
 _MAX_SKILL_SUPPORTING_FILES = 1
 _MAX_SKILL_TEXT_LENGTH = 4096
@@ -42,6 +44,7 @@ class Skill:
     templates: list[Path] = field(default_factory=list)
     references: list[Path] = field(default_factory=list)
     scripts: list[Path] = field(default_factory=list)
+    media: list[MediaAsset] = field(default_factory=list)
     raw_markdown: str = ""
 
     @property
@@ -55,6 +58,7 @@ class Skill:
             "name": self.name,
             "description": self.description,
             "source_path": self.source_path,
+            "media_count": len(self.media),
         }
 
     def render_supporting_files(self, label: str, paths: list[Path]) -> str | None:
@@ -84,3 +88,11 @@ class Skill:
             parts.append(example_section)
 
         return "\n\n".join(part for part in parts if part.strip())
+
+    @property
+    def media_assets(self) -> list[MediaAsset]:
+        """Return normalized multimodal assets declared by this skill."""
+        assets: list[MediaAsset] = []
+        for item in self.media:
+            assets.extend(coerce_media_assets(item))
+        return assets

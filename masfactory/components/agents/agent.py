@@ -3,6 +3,7 @@ from masfactory.adapters.model import Model, ModelResponseType
 from masfactory.utils.hook import masf_hook
 from masfactory.adapters.tool_adapter import ToolAdapter
 from masfactory.adapters.memory import Memory,HistoryMemory
+from masfactory.adapters.context.provider import HistoryProvider
 from masfactory.adapters.retrieval import Retrieval
 from masfactory.skills import Skill, SkillSet
 from typing import Any, Callable
@@ -11,6 +12,17 @@ import json
 from masfactory.core.message import MessageFormatter, StatefulFormatter
 from masfactory.adapters.context import ContextQuery, DefaultContextRenderer
 from masfactory.components.agents.request_context import RequestAssembler
+from masfactory.core.multimodal import (
+    AttachmentTagRegistry,
+    FieldModality,
+    FieldSpec,
+    MediaMessageBlock,
+    TextMessageBlock,
+    coerce_media_assets,
+    iter_message_texts,
+    normalize_field_specs,
+    validate_field_value,
+)
 from tenacity import retry,stop_after_attempt,wait_exponential
 _UNSET = object()
 
@@ -120,6 +132,7 @@ class Agent(Node):
         role_name: str | None = None,
         attributes: dict[str, object] | None = None,
         hide_unused_fields: bool = False,
+        reuse_attachment_tags: bool = True,
     ):
         """Create an LLM-driven agent node.
 
@@ -135,6 +148,8 @@ class Agent(Node):
             prompt_template: Optional user prompt template (may contain `{field}` placeholders).
             tools: Optional tool callables available to the agent.
             memories: Optional memories attached to the agent.
+                At most one HistoryProvider-backed memory is allowed. Other memories may be provided
+                in any quantity.
             retrievers: Optional retrieval backends attached to the agent.
             skills: Optional loaded skill packages attached to the agent.
             pull_keys: Pull key policy for attributes. If omitted, defaults to `{}` for Agents.
@@ -143,6 +158,10 @@ class Agent(Node):
             role_name: Optional role label used in chat traces. Defaults to `name`.
             attributes: Optional default attributes local to this agent.
             hide_unused_fields: If True, omit unused fields when formatting prompts.
+            reuse_attachment_tags: If True, deduplicate identical media within the current turn,
+                including attachments already present in history when the attached HistoryProvider
+                returns rich media blocks. If False, the current turn always emits fresh attachment
+                tags and blocks.
         """
         if pull_keys is _UNSET:
             pull_keys = {}
@@ -199,13 +218,17 @@ class Agent(Node):
         self._in_formatter:MessageFormatter = in_formatter
         if memories is None:
             memories = []
-        self._memories:list[Memory] = [memory for memory in memories if not isinstance(memory,HistoryMemory)]
-        self._history_memories:list[HistoryMemory] = [memory for memory in memories if isinstance(memory,HistoryMemory)]
+        history_memories = [memory for memory in memories if isinstance(memory, HistoryProvider)]
+        if len(history_memories) > 1:
+            raise ValueError("Agent accepts at most one HistoryProvider-backed memory in memories.")
+        self._memories:list[Memory] = [memory for memory in memories if not isinstance(memory, HistoryProvider)]
+        self._history_memories:list[HistoryProvider] = history_memories
         # NOTE: `retrievers` may include MCP or other ContextProvider-like adapters.
         self._retrievers:list[Retrieval] = list(retrievers) if retrievers else []
         self._is_built:bool = True
         self._model_settings:dict = model_settings if model_settings else {}
         self._context_knowledges:dict = {}
+        self._prompt_context_knowledges:dict = {}
         self._uncontexted_knowledges_keys:set[str] = set()
         max_retries = 3 if max_retries is None else int(max_retries)
         retry_delay = 1 if retry_delay is None else int(retry_delay)
@@ -224,6 +247,9 @@ class Agent(Node):
         self._active_context_source_aliases: dict[str, list[str]] = {}
         self._context_tool_renderer = DefaultContextRenderer()
         self._hide_unused_fields:bool = hide_unused_fields
+        self._reuse_attachment_tags = bool(reuse_attachment_tags)
+        self._current_attachment_blocks: list[MediaMessageBlock] = []
+        self._current_system_blocks: list[MediaMessageBlock] = []
         self._last_user_message = ""
         self._last_system_message = ""
         self._memory_insert_counter = 0
@@ -255,14 +281,21 @@ class Agent(Node):
         }
         return description
 
-    def _prompt_template_format(self,prompt_template:str|list[str]|None) -> str|dict:
+    def _prompt_template_format(
+        self,
+        prompt_template: str | list[str] | None,
+        *,
+        format_context: dict[str, object] | None = None,
+    ) -> str | dict:
         """Render template placeholders with current context knowledge."""
+        if format_context is None:
+            format_context = self._prompt_context_knowledges or self._context_knowledges
         if isinstance(prompt_template,dict):
             formatted_instructions = prompt_template.copy()
             for key in formatted_instructions.keys():
                 formatted_instructions[key],self._uncontexted_knowledges_keys = format_content_and_get_fields(
                     formatted_instructions[key],
-                    self._context_knowledges,
+                    format_context,
                     self._uncontexted_knowledges_keys,
                     value_renderer=self._in_formatter.render_value,
                 )
@@ -271,7 +304,7 @@ class Agent(Node):
             formatted_instructions = "\n".join(prompt_template)
             formatted_instructions,self._uncontexted_knowledges_keys = format_content_and_get_fields(
                 formatted_instructions,
-                self._context_knowledges,
+                format_context,
                 self._uncontexted_knowledges_keys,
                 value_renderer=self._in_formatter.render_value,
             )
@@ -279,7 +312,7 @@ class Agent(Node):
         elif isinstance(prompt_template,str) and  prompt_template != "":
             formatted_instructions,self._uncontexted_knowledges_keys = format_content_and_get_fields(
                 prompt_template,
-                self._context_knowledges,
+                format_context,
                 self._uncontexted_knowledges_keys,
                 value_renderer=self._in_formatter.render_value,
             )
@@ -323,11 +356,11 @@ class Agent(Node):
 
     def _context_fileds_prompt(self) -> dict:
         """Build additional context fields not consumed during template formatting."""
-        if self._context_knowledges is None or len(self._context_knowledges) == 0:
+        if self._prompt_context_knowledges is None or len(self._prompt_context_knowledges) == 0:
             return {}
         addition_context = {}
         for key in self._uncontexted_knowledges_keys:
-            addition_context[key] = self._context_knowledges[key]
+            addition_context[key] = self._prompt_context_knowledges[key]
         return addition_context
 
     def _user_prompt(self) -> dict:
@@ -346,6 +379,7 @@ class Agent(Node):
 
     def _update_context_knowledges(self,input_dict:dict[str,object]):
         """Refresh context knowledge from attributes, input, and role placeholders."""
+        self._context_knowledges = {}
         if self._attributes_store is not None and len(self._attributes_store) > 0:
             self._context_knowledges.update(self._attributes_store)
         self._context_knowledges.update(input_dict)
@@ -356,7 +390,192 @@ class Agent(Node):
             for key, desc in self._pull_keys.items():
                 if key not in self._context_knowledges:
                     self._context_knowledges[key] = desc
-        self._uncontexted_knowledges_keys = set(self._context_knowledges.keys())
+        self._prompt_context_knowledges = dict(self._context_knowledges)
+        self._uncontexted_knowledges_keys = set(self._prompt_context_knowledges.keys())
+
+    def _runtime_field_specs(self) -> dict[str, FieldSpec]:
+        raw_specs: dict[str, dict | str] = {}
+        if isinstance(self._pull_keys, dict):
+            raw_specs.update(self._pull_keys)
+        raw_specs.update(self.input_keys)
+        specs = normalize_field_specs(raw_specs)
+        for key in self._context_knowledges.keys():
+            specs.setdefault(
+                key,
+                FieldSpec(name=key, description=key, modality=FieldModality.ANY),
+            )
+        return specs
+
+    def _collect_collision_texts(
+        self,
+        *,
+        history_messages: list[dict],
+        passive_provider_blocks: list[tuple[str, list[object]]],
+    ) -> list[str]:
+        texts: list[str] = []
+        for message in history_messages:
+            texts.extend(iter_message_texts(message.get("content")))
+        for _label, blocks in passive_provider_blocks:
+            for block in blocks:
+                block_text = getattr(block, "text", None)
+                if isinstance(block_text, str) and block_text:
+                    texts.append(block_text)
+        raw_instructions = self._instructions
+        if isinstance(raw_instructions, str) and raw_instructions:
+            texts.append(raw_instructions)
+        if isinstance(self._prompt_template, str) and self._prompt_template:
+            texts.append(self._prompt_template)
+        for value in self._context_knowledges.values():
+            if isinstance(value, str) and value:
+                texts.append(value)
+        return texts
+
+    def _build_user_attachment_intro(self, block: MediaMessageBlock) -> str:
+        if block.modality == FieldModality.IMAGE:
+            file_type = "image"
+        elif block.modality == FieldModality.PDF:
+            file_type = "PDF file"
+        else:
+            file_type = "file"
+        return f"The tag for the following {file_type} is {block.tag}. Below, {block.tag} will be used to refer to this file."
+
+    def _prepare_multimodal_context(
+        self,
+        *,
+        input_dict: dict[str, object],
+        history_messages: list[dict],
+        passive_provider_blocks: list[tuple[str, list[object]]],
+    ) -> list[MediaMessageBlock]:
+        specs = self._runtime_field_specs()
+        prompt_context = dict(self._context_knowledges)
+
+        registry = AttachmentTagRegistry()
+        if self._reuse_attachment_tags:
+            registry.hydrate_from_messages(history_messages, reuse_fingerprints=True)
+        else:
+            registry.hydrate_from_messages(history_messages, reuse_fingerprints=False)
+        registry.add_used_texts(
+            self._collect_collision_texts(
+                history_messages=history_messages,
+                passive_provider_blocks=passive_provider_blocks,
+            )
+        )
+
+        actual_keys = set(self._attributes_store.keys()) | set(input_dict.keys()) | {"role_name"}
+        outbound_blocks: list[MediaMessageBlock] = []
+
+        for key in actual_keys:
+            if key not in self._context_knowledges:
+                continue
+            value = self._context_knowledges[key]
+            spec = specs.get(key, FieldSpec(name=key, description=key, modality=FieldModality.ANY))
+            validate_field_value(spec, value)
+            assets = coerce_media_assets(value)
+            if not assets:
+                continue
+
+            tags: list[str] = []
+            for asset in assets:
+                reserve = registry.reserve_tag if self._reuse_attachment_tags else registry.reserve_fresh_tag
+                tag, is_new = reserve(
+                    asset,
+                    field_name=key,
+                    description=spec.description or key,
+                )
+                tags.append(tag)
+                if is_new:
+                    outbound_blocks.append(
+                        MediaMessageBlock(
+                            asset=asset,
+                            field_name=key,
+                            tag=tag,
+                            description=spec.description or key,
+                        )
+                    )
+            prompt_context[key] = "\n".join(tags)
+
+        self._prompt_context_knowledges = prompt_context
+        self._uncontexted_knowledges_keys = set(prompt_context.keys())
+        self._current_attachment_blocks = outbound_blocks
+        return outbound_blocks
+
+    def _build_system_attachment_intro(self, block: MediaMessageBlock) -> str:
+        if block.modality == FieldModality.IMAGE:
+            file_type = "image"
+        elif block.modality == FieldModality.PDF:
+            file_type = "PDF file"
+        else:
+            file_type = "file"
+        return f"The tag for the following skill {file_type} is {block.tag}. In later instructions, {block.tag} refers to this file."
+
+    def _build_system_message_content(self, system_prompt: str) -> str | list[TextMessageBlock | MediaMessageBlock]:
+        if not self._current_system_blocks:
+            return system_prompt
+        content: list[TextMessageBlock | MediaMessageBlock] = [TextMessageBlock(text=system_prompt)]
+        for block in self._current_system_blocks:
+            content.append(TextMessageBlock(text=self._build_system_attachment_intro(block)))
+            content.append(block)
+        return content
+
+    def _build_user_message_content(
+        self,
+        user_prompt: str,
+        attachment_blocks: list[MediaMessageBlock],
+    ) -> str | list[TextMessageBlock | MediaMessageBlock]:
+        if not attachment_blocks:
+            return user_prompt
+        content: list[TextMessageBlock | MediaMessageBlock] = []
+        for block in attachment_blocks:
+            content.append(TextMessageBlock(text=self._build_user_attachment_intro(block)))
+            content.append(block)
+        content.append(TextMessageBlock(text=user_prompt))
+        return content
+
+    def _build_request_user_payload(
+        self,
+        history_messages: list[dict],
+        passive_provider_blocks: list[tuple[str, list[object]]],
+        input_dict: dict[str, object],
+    ) -> dict:
+        self._prepare_multimodal_context(
+            input_dict=input_dict,
+            history_messages=history_messages,
+            passive_provider_blocks=passive_provider_blocks,
+        )
+        return self._user_prompt()
+
+    def _build_request_user_message(self, user_prompt: str) -> str | list[TextMessageBlock | MediaMessageBlock]:
+        return self._build_user_message_content(user_prompt, list(self._current_attachment_blocks))
+
+    def _prepare_skill_multimodal_context(self, system_prompt: str) -> list[MediaMessageBlock]:
+        skill_assets = self._skill_set.media_assets
+        if not skill_assets:
+            self._current_system_blocks = []
+            return []
+
+        registry = AttachmentTagRegistry()
+        registry.add_used_text(system_prompt)
+        outbound_blocks: list[MediaMessageBlock] = []
+        for index, asset in enumerate(skill_assets, start=1):
+            tag, _is_new = registry.reserve_fresh_tag(
+                asset,
+                field_name=f"skill_media_{index}",
+                description=asset.default_filename,
+            )
+            outbound_blocks.append(
+                MediaMessageBlock(
+                    asset=asset,
+                    field_name="skill_media",
+                    tag=tag,
+                    description=asset.default_filename,
+                )
+            )
+        self._current_system_blocks = outbound_blocks
+        return outbound_blocks
+
+    def _build_request_system_message(self, system_prompt: str) -> str | list[TextMessageBlock | MediaMessageBlock]:
+        self._prepare_skill_multimodal_context(system_prompt)
+        return self._build_system_message_content(system_prompt)
 
     def _configure_stateful_formatters(self) -> None:
         """
@@ -384,6 +603,8 @@ class Agent(Node):
         self._active_context_provider_map = {}
         self._active_context_source_entries = []
         self._active_context_source_aliases = {}
+        self._current_attachment_blocks = []
+        self._current_system_blocks = []
         self._tool_adapter = ToolAdapter(self._user_tools) if self._user_tools else None
 
     def observe(self, input_dict: dict[str, object]) -> tuple[str, str, list[dict]]:
@@ -403,6 +624,9 @@ class Agent(Node):
             user_tools=self._user_tools,
             context_tool_renderer=self._context_tool_renderer,
             user_payload_factory=self._user_prompt,
+            user_payload_builder=self._build_request_user_payload,
+            system_message_builder=self._build_request_system_message,
+            user_message_builder=self._build_request_user_message,
         )
         request_context = assembler.assemble(
             system_payload=self._system_prompt(),
@@ -434,7 +658,12 @@ class Agent(Node):
             if isinstance(only_value, str) and only_value.strip():
                 return only_value.strip()
         try:
-            return json.dumps(input_dict, ensure_ascii=False, sort_keys=True, default=str)
+            return json.dumps(
+                input_dict,
+                ensure_ascii=False,
+                sort_keys=True,
+                default=self._in_formatter.render_value,
+            )
         except Exception:
             return str(input_dict)
 
@@ -470,7 +699,7 @@ class Agent(Node):
                 {
                     "role": "tool",
                     "name": tool_name,
-                    "content": tool_call_result,
+                    "content": self._in_formatter.render_value(tool_call_result),
                     "tool_call_id": tool_call.get("id"),
                 }
             )
@@ -486,14 +715,13 @@ class Agent(Node):
     def step(self, input_dict: dict[str, object]) -> dict:
         """Run one full observe/think/act loop and return formatted output."""
 
-        # NOTE: We keep the retry semantics of the original forward implementation:
-        # retry covers both model IO and output-format validation errors.
         @retry(
             stop=stop_after_attempt(self._max_retries),
             wait=wait_exponential(multiplier=self._retry_delay, exp_base=self._retry_backoff),
         )
-        def _run_once() -> tuple[dict, str, str, str]:
+        def _run_once() -> tuple[dict, str, str, str, object]:
             system_prompt, user_prompt, messages = self.observe(input_dict)
+            user_message_content = messages[-1]["content"] if messages else user_prompt
 
             max_tool_calls = 10
             tool_call_count = 0
@@ -515,7 +743,7 @@ class Agent(Node):
                     for key in self.output_keys:
                         if key not in response_content_dict:
                             raise ValueError(f"Response content does not contain key: {key}")
-                    return response_content_dict, response_content, system_prompt, user_prompt
+                    return response_content_dict, response_content, system_prompt, user_prompt, user_message_content
 
                 if response["type"] != ModelResponseType.TOOL_CALL:
                     raise ValueError("Response is not valid")
@@ -532,12 +760,18 @@ class Agent(Node):
                 # Hook: agent_act_completed
                 self.hooks.dispatch(self.Hook.ACT_COMPLETED, self, tool_calls, tool_results)
 
-                followup_messages = response.get("followup_messages")
-                if isinstance(followup_messages, list) and followup_messages:
-                    messages.extend(followup_messages)
+                assistant_message = response.get("assistant_message")
+                if assistant_message is None:
+                    raw_response = response.get("raw_response")
+                    if raw_response is not None:
+                        choices = getattr(raw_response, "choices", None)
+                        if choices:
+                            assistant_message = getattr(choices[0], "message", None)
+                if assistant_message is not None:
+                    messages.append(assistant_message)
                 messages.extend(tool_results)
 
-        response_content_dict, response_content, system_prompt, user_prompt = _run_once()
+        response_content_dict, response_content, system_prompt, user_prompt, user_message_content = _run_once()
 
         self._last_user_message = user_prompt
         self._last_system_message = system_prompt
@@ -559,7 +793,7 @@ class Agent(Node):
             memory.insert(memory_key, response_content)
 
         for memory in self._history_memories:
-            memory.insert("user", user_prompt)
+            memory.insert("user", user_message_content)
             memory.insert("assistant", response_content)
 
         return response_content_dict

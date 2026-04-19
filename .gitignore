@@ -165,3 +165,5 @@ vibe_test/
 **/out/
 
 plugins/
+CLAUDE.md
+AGENT.md

@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable
 from abc import ABC, abstractmethod
 from .gate import Gate
+from .multimodal import FieldSpec, normalize_field_specs
 from masfactory.utils.hook import masf_hook, HookManager, HookStage
 from masfactory.utils.naming import validate_name
 from masfactory.utils.selector import Selector, build_selector
@@ -163,6 +164,12 @@ class Node(ABC):
         return self._pull_keys.copy()
 
     @property
+    def pull_field_specs(self) -> dict[str, FieldSpec] | None:
+        if self._pull_keys is None:
+            return None
+        return normalize_field_specs(self._pull_keys)
+
+    @property
     def push_keys(self) -> dict[str, dict | str] | None:
         """
         Read-only view of this node's `push_keys` rule.
@@ -170,6 +177,12 @@ class Node(ABC):
         if self._push_keys is None:
             return None
         return self._push_keys.copy()
+
+    @property
+    def push_field_specs(self) -> dict[str, FieldSpec] | None:
+        if self._push_keys is None:
+            return None
+        return normalize_field_specs(self._push_keys)
     @property
     def attributes(self):
         return self._attributes_store
@@ -187,6 +200,10 @@ class Node(ABC):
         for edge in self._in_edges:
             merged_keys.update(edge.keys)
         return merged_keys
+
+    @property
+    def input_field_specs(self) -> dict[str, FieldSpec]:
+        return normalize_field_specs(self.input_keys)
         
     @property
     def output_keys(self) -> dict[str,dict|str]:
@@ -194,6 +211,10 @@ class Node(ABC):
         for edge in self._out_edges:
             merged_keys.update(edge.keys)
         return merged_keys
+
+    @property
+    def output_field_specs(self) -> dict[str, FieldSpec]:
+        return normalize_field_specs(self.output_keys)
 
     def add_in_edge(self, edge):
         self._in_edges.append(edge)

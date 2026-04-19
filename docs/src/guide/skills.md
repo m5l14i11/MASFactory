@@ -109,8 +109,42 @@ When you pass `skills=[...]` into `Agent(...)`:
 - each skill contributes its main `SKILL.md` body
 - selected supporting files such as templates and examples may also be included in a bounded way
 - skill provenance metadata is retained for debugging and visualizer serialization
+- if a skill declares `media:` in `SKILL.md` frontmatter, those assets are attached alongside the system-side skill directives rather than being injected into the user message
 
 This means Skills stay lightweight: the Agent still owns the model, memory, retrieval, tool execution, and runtime identity.
+
+### 5.1 Skill media in frontmatter
+
+Skill packages may declare static media assets in `SKILL.md` frontmatter:
+
+```md
+---
+name: receipt-skill
+description: Validate receipts against the reference guide
+media:
+  - type: image
+    path: guide.png
+    mime_type: image/png
+  - type: pdf
+    path: policy.pdf
+---
+Compare the current receipt with the guide image and the policy PDF.
+```
+
+Supported fields per media item:
+
+- `type`: `image` or `pdf`
+- `path` / `url` / `file_id` / `data`: media source
+- `source_kind`: optional explicit source kind override
+- `mime_type`: optional for images
+- `filename`: optional display filename
+
+These skill media assets are treated as static directive attachments:
+
+- they stay with the skill text on the system side
+- they are not deduplicated against chat history
+- they are not replayed through `reuse_attachment_tags`
+- model adapters that cannot carry system-side media should raise a clear error
 
 ---
 

@@ -50,8 +50,8 @@ MASFactory 提供两类顶层组件：`SingleAgent` 与 `RootGraph`。
 ### `SingleAgent`
 单智能体组件。它不依赖于任何 Graph 即可独立使用的 Agent 组件，用户可以直接实例化并使用。<br>
 适用于快速问答、简单工具调用、脚本化批处理等无需完整工作流编排的任务。
-- 构造参数： `name`、`model`、`instructions`、`prompt_template`?、`tools`?、`memories`?、`model_settings`?、`role_name`? <br>
-  参数含义参考 [Agent](#Agent)。
+- 构造参数： `name`、`model`、`instructions`、`prompt_template`?、`tools`?、`memories`?、`model_settings`?、`role_name`?、`formatters`?、`skills`?、`attributes`?、`hide_unused_fields`?、`reuse_attachment_tags`? <br>
+  参数含义参考 [Agent](#Agent)。`SingleAgent` 也遵循相同的 memory 规则：最多只能挂载一个 `HistoryProvider` 类型的 memory。
 - 相关方法：
     - `invoke`：参数包括 `input`（`dict`）；返回 `dict`。<br>
     `SingleAgent` 的输入/输出都使用 `dict`（由配置的 `MessageFormatter` 解析/生成）。
@@ -97,18 +97,19 @@ MASFactory 提供两类顶层组件：`SingleAgent` 与 `RootGraph`。
 ## Agent 组件
 ### `Agent`
 标准智能体节点。
-- 构造参数：`name`、`model`、`instructions`、`prompt_template`?、`formatters`?、`tools`?、`memories`?、`retrievers`?、`pull_keys`?、`push_keys`?、`model_settings`?、`role_name`?、`hide_unused_fields`?<br>
+- 构造参数：`name`、`model`、`instructions`、`prompt_template`?、`formatters`?、`tools`?、`memories`?、`retrievers`?、`pull_keys`?、`push_keys`?、`model_settings`?、`role_name`?、`hide_unused_fields`?、`reuse_attachment_tags`?<br>
     - `name`：节点名称，用于标识当前 Agent；<br>
     - `model`：Agent 所调用的大模型，接收一个 `Model` 对象，对主流 LLM API 进行了适配。详细参考：[模型适配器](/zh/guide/model_adapter)；<br>
     - `instructions`：用于发送给 Agent 的指令信息。接收一个字符串或字符串列表；当为列表时将以换行符拼接成完整的指令。支持使用 `{替换字段}` 将 `in_edges` 中的 `keys` 字段、节点变量 `attributes` 中的字段、`role_name` 嵌入到指令中；<br>
     - `prompt_template`：Agent 的 prompt 模板（对应 user prompt）。支持 `str` 或 `list[str]`；当为列表时将以换行符拼接；可与 `instructions` 组合使用；默认为 `None`；<br>
     - `formatters`：消息格式化器（LLM I/O 的“协议”）。可传单个 formatter（同时用于输入/输出），或传 `[in_formatter, out_formatter]` 两个 formatter。默认使用“段落式输入 + JSON 输出”。<br>
     - `tools`：可供 Agent 调用的工具函数列表。函数名、参数名、返回值类型和 docstring 将被 MASFactory 自动添加到 LLM 上下文中，依据 LLM 调用结果自动调用对应工具，并将结果返回给 LLM；<br>
-	- `memories`：记忆模块列表（写入 + 读取）。除 `HistoryMemory` 外，其它 Memory 作为上下文源通过 `get_blocks(...)` 注入 `CONTEXT`；同时 Agent 会在每次 step 后调用 `insert(...)` 写入本轮输出。<br>
+	- `memories`：记忆模块列表（写入 + 读取）。除 `HistoryMemory` 外，其它 Memory 作为上下文源通过 `get_blocks(...)` 注入 `CONTEXT`；同时 Agent 会在每次 step 后调用 `insert(...)` 写入本轮输出。一个 Agent 最多只能挂载一个 `HistoryProvider` 类型的 memory，其他 memory 类型数量不限。<br>
 	- `retrievers`：RAG / 外部上下文源列表（只读）。通过 `get_blocks(...)` 注入 `CONTEXT`。MCP 形态的上下文源也可通过该参数接入。<br>
-	- `model_settings`：传递给底层模型接口的附加设置（参考 OpenAI Chat Completions Legacy 接口）。支持：`temperature`（浮点数，范围 [0.0, 2.0]）、`top_p`（浮点数，范围 [0.0, 1.0]）、`max_tokens`（正整数）、`stop`（停止词，`str` 或 `list[str]`）。未列出的键将按原样透传给模型适配器（若模型支持）。例如：`{"temperature": 0.7, "top_p": 0.95, "max_tokens": 512, "stop": ["</end>"]}`；<br>
+	- `model_settings`：传递给底层模型适配器的统一设置。支持：`temperature`（浮点数，范围 [0.0, 2.0]）、`top_p`（浮点数，范围 [0.0, 1.0]）、`max_tokens`（正整数）、`stop`（停止词，`str` 或 `list[str]`）。未列出的键将按原样透传给模型适配器（若模型支持）。例如：`{"temperature": 0.7, "top_p": 0.95, "max_tokens": 512, "stop": ["</end>"]}`；<br>
     - `role_name`：Agent 的角色名称。可使用 `{role_name}` 将其插入到 instructions 中。如果未设置 `role_name`，则 `role_name` 直接使用 `name` 的值。
     - `hide_unused_fields`：当为 `True` 时，未被模板占位符消费的输入字段不会被自动附加到 user prompt（更“干净”的提示，但也更容易漏信息）。
+    - `reuse_attachment_tags`：当为 `True` 时，会对本轮 media 做去重；如果挂载的历史返回了富媒体 block，则本轮相同附件可以直接复用这些已有 tag 而不再重复发送。历史侧的 media 索引/合并仍由 `HistoryMemory` 实例自己控制，不通过 `Agent` 透传。
 - 特性：
   - 模型适配：适配主流模型 API 接口。
   - 自动工具调用：当 LLM 返回工具调用时自动执行对应工具，回填结果并再次请求 LLM，直到返回最终内容。

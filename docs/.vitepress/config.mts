@@ -56,6 +56,7 @@ export default defineConfig({
           { text: 'Context Adapters', link: '/guide/context_adapters' },
           { text: 'Tool Calling', link: '/guide/tools' },
           { text: 'Skills', link: '/guide/skills' },
+          { text: 'Multimodal Inputs', link: '/guide/multimodal' },
           { text: 'MASFactory Visualizer', link: '/guide/visualizer' },
           { text: 'Runtime Hooks', link: '/guide/runtime_hooks' },
         ]
@@ -137,6 +138,7 @@ export default defineConfig({
               { text: 'Memory/RAG/MCP', link: '/zh/guide/context_adapters' },
               { text: '工具调用', link: '/zh/guide/tools' },
               { text: 'Skills', link: '/zh/guide/skills' },
+              { text: '多模态输入', link: '/zh/guide/multimodal' },
               { text: 'MASFactory Visualizer', link: '/zh/guide/visualizer' },
               { text: '运行时 Hooks', link: '/zh/guide/runtime_hooks' },
             ]

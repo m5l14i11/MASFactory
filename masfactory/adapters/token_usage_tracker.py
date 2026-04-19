@@ -4,6 +4,19 @@ from typing import Optional
 from abc import ABC, abstractmethod
 import tiktoken
 
+from masfactory.core.multimodal import iter_message_texts
+
+
+def _message_text_fragments(message: dict) -> list[str]:
+    fragments: list[str] = []
+    for key, value in message.items():
+        if key == "content":
+            fragments.extend(list(iter_message_texts(value)))
+            continue
+        if isinstance(value, str):
+            fragments.append(value)
+    return fragments
+
 class TokenCounter(ABC):
     """Abstract token counter interface."""
     
@@ -65,11 +78,10 @@ class OpenAITokenCounter(TokenCounter):
         num_tokens = 0
         for message in messages:
             num_tokens += 3
-            for key, value in message.items():
-                if isinstance(value, str):
-                    num_tokens += self.count_tokens(value)
-                if key == "name":
-                    num_tokens += 1
+            for fragment in _message_text_fragments(message):
+                num_tokens += self.count_tokens(fragment)
+            if "name" in message:
+                num_tokens += 1
         num_tokens += 3
         return num_tokens
 
@@ -108,16 +120,8 @@ class AnthropicTokenCounter(TokenCounter):
     def count_message_tokens(self, messages: list[dict]) -> int:
         total = 0
         for msg in messages:
-            if "content" in msg:
-                content = msg["content"]
-                if isinstance(content, str):
-                    total += self.count_tokens(content)
-                elif isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and "text" in block:
-                            total += self.count_tokens(block["text"])
-            if "role" in msg:
-                total += self.count_tokens(msg["role"])
+            for fragment in _message_text_fragments(msg):
+                total += self.count_tokens(fragment)
         return total
 
 class GeminiTokenCounter(TokenCounter):
@@ -170,14 +174,7 @@ class GeminiTokenCounter(TokenCounter):
         if client is None:
             return self._fallback.count_message_tokens(messages)
         try:
-            contents: list[str] = []
-            for msg in messages:
-                content = msg.get("content", "")
-                if content is None:
-                    content = ""
-                elif not isinstance(content, str):
-                    content = str(content)
-                contents.append(content)
+            contents = ["\n".join(_message_text_fragments(msg)) for msg in messages]
             resp = client.models.count_tokens(model=self.model_name, contents=contents)
             return int(resp.total_tokens or 0)
         except Exception:
@@ -269,10 +266,8 @@ class HuggingFaceTokenCounter(TokenCounter):
     def count_message_tokens(self, messages: list[dict]) -> int:
         total = 0
         for msg in messages:
-            if "content" in msg and isinstance(msg["content"], str):
-                total += self.count_tokens(msg["content"])
-            if "role" in msg:
-                total += self.count_tokens(msg["role"])
+            for fragment in _message_text_fragments(msg):
+                total += self.count_tokens(fragment)
         return total
 
 class DefaultTokenCounter(TokenCounter):
@@ -293,10 +288,8 @@ class DefaultTokenCounter(TokenCounter):
     def count_message_tokens(self, messages: list[dict]) -> int:
         total = 0
         for msg in messages:
-            if "content" in msg and isinstance(msg["content"], str):
-                total += self.count_tokens(msg["content"])
-            if "role" in msg:
-                total += self.count_tokens(msg["role"])
+            for fragment in _message_text_fragments(msg):
+                total += self.count_tokens(fragment)
         return total
 
 class TokenUsageTracker:

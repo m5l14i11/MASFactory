@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Iterable
 
+from masfactory.core.multimodal import ImageAsset, MediaAsset, PdfAsset
+
 from .errors import InvalidSkillPackageError, SkillNotFoundError, SkillParseError
 from .skill import Skill
 from .parser import parse_skill_markdown
@@ -8,6 +10,65 @@ from .parser import parse_skill_markdown
 
 def _sorted_files(path: Path) -> list[Path]:
     return sorted([p for p in path.rglob("*") if p.is_file()])
+
+
+def _coerce_skill_media_item(raw: object, *, skill_dir: Path) -> MediaAsset:
+    if isinstance(raw, MediaAsset):
+        return raw
+    if not isinstance(raw, dict):
+        raise SkillParseError("Skill frontmatter 'media' entries must be mappings or MediaAsset objects.")
+
+    media_type = str(raw.get("type") or raw.get("modality") or "").strip().lower()
+    explicit_source_kind = raw.get("source_kind")
+    if explicit_source_kind is not None:
+        source_kind = str(explicit_source_kind).strip().lower()
+    elif "path" in raw:
+        source_kind = "path"
+    elif "url" in raw:
+        source_kind = "url"
+    elif "file_id" in raw:
+        source_kind = "file_id"
+    elif "data" in raw:
+        source_kind = "base64"
+    else:
+        source_kind = "path"
+    filename = raw.get("filename")
+    if filename is not None:
+        filename = str(filename)
+
+    value = raw.get("value")
+    if value is None:
+        value = raw.get("path") or raw.get("url") or raw.get("file_id") or raw.get("data")
+    if value is None:
+        raise SkillParseError("Skill media entry must define one of: value/path/url/file_id/data.")
+
+    if source_kind == "path":
+        value = str((skill_dir / str(value)).resolve())
+    elif source_kind in {"url", "file_id", "base64"}:
+        value = str(value)
+    elif source_kind == "bytes":
+        if isinstance(value, str):
+            value = value.encode("utf-8")
+        elif not isinstance(value, bytes):
+            raise SkillParseError("Skill media bytes entries must be bytes or strings.")
+    else:
+        raise SkillParseError(f"Unsupported skill media source_kind: {source_kind!r}")
+
+    if media_type == "image":
+        mime_type = str(raw.get("mime_type") or "image/png")
+        return ImageAsset(source_kind=source_kind, value=value, mime_type=mime_type, filename=filename)
+    if media_type == "pdf":
+        return PdfAsset(source_kind=source_kind, value=value, filename=filename)
+    raise SkillParseError(f"Unsupported skill media type: {media_type!r}")
+
+
+def _load_skill_media(frontmatter: dict[str, object], *, skill_dir: Path) -> list[MediaAsset]:
+    raw_media = frontmatter.get("media")
+    if raw_media is None:
+        return []
+    if not isinstance(raw_media, list):
+        raise SkillParseError("Skill frontmatter 'media' must be a list.")
+    return [_coerce_skill_media_item(item, skill_dir=skill_dir) for item in raw_media]
 
 
 def load_skill(path: str | Path) -> Skill:
@@ -59,6 +120,7 @@ def load_skill(path: str | Path) -> Skill:
 
     referenced = set(examples) | set(templates) | set(scripts) | {skill_md_path}
     references = sorted([p for p in _sorted_files(skill_dir) if p not in referenced])
+    media = _load_skill_media(frontmatter, skill_dir=skill_dir)
 
     return Skill(
         name=name,
@@ -71,6 +133,7 @@ def load_skill(path: str | Path) -> Skill:
         templates=templates,
         references=references,
         scripts=scripts,
+        media=media,
         raw_markdown=raw_markdown,
     )
 

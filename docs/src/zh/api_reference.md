@@ -10,7 +10,7 @@
 :::
 
 ::: info 版本信息
-当前文档对应 MASFactory v1.0.1
+当前文档对应 MASFactory v1.0.2
 :::
 
 
@@ -287,12 +287,14 @@ class Agent(Node):
         tools: list[Callable] | None = None,
         memories: list[Memory] | None = None,
         retrievers: list[Retrieval] | None = None,
+        skills: list[Skill] | None = None,
         pull_keys: dict[str, dict|str] | None = {},
         push_keys: dict[str, dict|str] | None = {},
         model_settings: dict | None = None,
         role_name: str | None = None,
         attributes: dict[str, object] | None = None,
         hide_unused_fields: bool = False,
+        reuse_attachment_tags: bool = True,
     )
 ```
 
@@ -309,7 +311,7 @@ class Agent(Node):
 | `retry_backoff` | `int \| None` | `2` | 退避重试的指数基数 |
 | `prompt_template` | `str \| list[str] \| None` | `None` | 提示模板 |
 | `tools` | `list[Callable] \| None` | `None` | 工具函数列表 |
-| `memories` | `list[Memory] \| None` | `None` | 记忆适配器列表 |
+| `memories` | `list[Memory] \| None` | `None` | 记忆适配器列表；最多只能挂载一个 `HistoryProvider` 类型的 memory |
 | `retrievers` | `list[Retrieval] \| None` | `None` | 检索适配器列表（RAG/MCP 等） |
 | `skills` | `list[Skill] \| None` | `None` | 显式加载并附着在 directive 层的 skill 包 |
 | `pull_keys` | `dict[str,dict|str] \| None` | `{}` | 可见/需要的节点变量键及说明 |
@@ -318,6 +320,7 @@ class Agent(Node):
 | `role_name` | `str` | `None` | Agent 的角色名称 |
 | `attributes` | `dict[str,object] \| None` | `None` | Agent 的本地初始节点变量 |
 | `hide_unused_fields` | `bool` | `False` | 是否在 prompt 组装中隐藏未使用字段 |
+| `reuse_attachment_tags` | `bool` | `True` | 对本轮 media 做去重；若历史返回富媒体 block，则相同附件可复用这些已有 tag |
 
 #### 支持的 model_settings 参数
 
@@ -770,7 +773,12 @@ class SingleAgent(Agent):
                 memories: list[Memory] | None = None,
                 retrievers: list[Retrieval] | None = None,
                 model_settings: dict | None = None,
-                role_name: str | None = None)
+                role_name: str | None = None,
+                formatters: list[MessageFormatter] | MessageFormatter | None = None,
+                skills: list[Skill] | None = None,
+                attributes: dict[str, object] | None = None,
+                hide_unused_fields: bool = False,
+                reuse_attachment_tags: bool = True)
 ```
 
 #### 构造参数
@@ -785,10 +793,15 @@ class SingleAgent(Agent):
 | `retry_delay` | `int` | `1` | 退避重试的基础延迟系数 |
 | `retry_backoff` | `int` | `2` | 退避重试的指数基数 |
 | `tools` | `list[Callable]` | `None` | 可用工具列表 |
-| `memories` | `list[Memory] \| None` | `None` | 记忆模块列表 |
+| `memories` | `list[Memory] \| None` | `None` | 记忆模块列表；最多只能挂载一个 `HistoryProvider` 类型的 memory |
 | `retrievers` | `list[Retrieval] \| None` | `None` | 检索适配器列表（RAG/MCP 等） |
 | `model_settings` | `dict \| None` | `None` | 模型调用参数 |
 | `role_name` | `str \| None` | `None` | 角色名称 |
+| `formatters` | `list[MessageFormatter] \| MessageFormatter \| None` | `None` | 可选输入/输出格式化器 |
+| `skills` | `list[Skill] \| None` | `None` | 可选的已加载 skill 包 |
+| `attributes` | `dict[str, object] \| None` | `None` | 可选默认本地 attributes |
+| `hide_unused_fields` | `bool` | `False` | 是否隐藏未被模板消费的字段 |
+| `reuse_attachment_tags` | `bool` | `True` | 对本轮 media 做去重；若历史返回富媒体 block，则相同附件可复用这些已有 tag |
 
 #### 特性
 
@@ -923,6 +936,7 @@ class SkillSet:
 
 - `render_instructions() -> str`：渲染 `[Loaded Skills]` 区块
 - `compose(base_instructions: str) -> str`：把 skill 渲染结果追加到基础 instructions 后
+- `media_assets -> list[MediaAsset]`：返回 skill 声明的静态 media 资源
 - `metadata() -> list[dict[str, object]]`：返回已加载 skills 的稳定元数据
 
 ### load_skill()
@@ -1202,7 +1216,7 @@ class Model(ABC):
 | 属性 | 类型 | 描述 |
 |------|------|------|
 | `model_name` | `str` | 模型的名称（只读） |
-| `description` | `str` | 模型的描述（只读） |
+| `description` | `object` | 模型的描述信息（只读） |
 
 #### 核心方法
 
@@ -1243,8 +1257,8 @@ def invoke(self,
 
 ### OpenAIModel 类
 
-::: info OpenAI 模型适配器
-OpenAIModel 实现了与 OpenAI API 交互的模型适配器。
+::: info OpenAI Responses 模型适配器
+`OpenAIModel` 使用 OpenAI Responses API，并支持包括 PDF 在内的多模态输入。
 :::
 
 ```python
@@ -1292,6 +1306,24 @@ model = OpenAIModel(
 
 ---
 
+### LegacyOpenAIModel 类
+
+::: info OpenAI Chat Completions 模型适配器
+`LegacyOpenAIModel` 使用 Chat Completions API 对接 OpenAI 兼容接口，且不支持 PDF 输入。
+:::
+
+```python
+class LegacyOpenAIModel(Model):
+    def __init__(self,
+                model_name: str,
+                api_key: str,
+                base_url: str | None = None,
+                invoke_settings: dict | None = None,
+                **kwargs)
+```
+
+---
+
 ### AnthropicModel 类
 
 ::: info Anthropic 模型适配器
@@ -1323,12 +1355,14 @@ class AnthropicModel(Model):
 - `claude-3-sonnet-20240229`
 - `claude-3-haiku-20240307`
 
+> 这些仅是示例，不代表完整或实时的 provider 模型列表。
+
 ---
 
 ### GeminiModel 类
 
 ::: info Google Gemini 模型适配器
-GeminiModel 实现了与 Google Gemini API 交互的模型适配器。
+GeminiModel 使用 `google-genai` SDK 与 Google Gemini 交互。
 :::
 
 ```python
@@ -1356,6 +1390,8 @@ class GeminiModel(Model):
 - `gemini-pro-vision`
 - `gemini-1.5-pro`
 
+> 这些仅是示例，不代表完整或实时的 provider 模型列表。
+
 ---
 ## 记忆系统
 ### Memory 类（ContextBlock 注入）
@@ -1369,8 +1405,8 @@ Memory 作为上下文源（ContextProvider）通过 `get_blocks(...)` 产出结
 ```python
 class Memory(ContextProvider, ABC):
     def __init__(self, context_label: str, *, passive: bool = True, active: bool = False)
-    def insert(self, key: str, value: str)
-    def update(self, key: str, value: str)
+    def insert(self, key: str, value: object)
+    def update(self, key: str, value: object)
     def delete(self, key: str, index: int = -1)
     def reset(self)
     def get_blocks(self, query: ContextQuery, *, top_k: int = 8) -> list[ContextBlock]
@@ -1390,13 +1426,20 @@ class Memory(ContextProvider, ABC):
 
 ::: info 历史记忆实现
 `HistoryMemory` 用于保存对话历史，并以 chat messages 的形式插入到模型 `messages` 中。  
-它不会产出 `ContextBlock`（`get_blocks(...)` 恒为空）。
+它不会产出 `ContextBlock`（`get_blocks(...)` 恒为空）。一个 `Agent` 最多只能挂载一个 `HistoryProvider` 类型的 memory。它也可以在返回 `get_messages(...)` 时可选地合并重复历史 media；这个行为由 memory 自己的 `merge_historical_media` 参数控制。当开启时，重复附件会以索引标签引用形式返回，而不是重复 media block。
 :::
 
 ```python
 class HistoryMemory(Memory, HistoryProvider):
-    def __init__(self, top_k: int = 10, memory_size: int = 1000, context_label: str = "CONVERSATION_HISTORY")
-    def insert(self, role: str, response: str)
+    def __init__(
+        self,
+        top_k: int = 10,
+        memory_size: int = 1000,
+        context_label: str = "CONVERSATION_HISTORY",
+        *,
+        merge_historical_media: bool = True,
+    )
+    def insert(self, role: str, response: object)
     def get_messages(self, query: ContextQuery | None = None, *, top_k: int = -1) -> list[dict]
 ```
 

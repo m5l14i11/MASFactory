@@ -44,7 +44,7 @@ MASFactory 的一个核心目标是：把“上下文组织”从胶水代码里
 
 ### 1.1 示例：对话历史（HistoryMemory）
 
-`HistoryMemory` 是一个特殊的 Memory：它不会把内容注入到 `CONTEXT` 字段，而是以 **chat messages** 的形式插入到 `messages` 列表中（即模型看到的历史对话）。
+`HistoryMemory` 是一个特殊的 Memory：它不会把内容注入到 `CONTEXT` 字段，而是以 **chat messages** 的形式插入到 `messages` 列表中（即模型看到的历史对话）。一个 `Agent` 最多只能挂载一个 `HistoryProvider` 类型的 memory。`HistoryMemory` 也负责自己的历史多模态合并行为；这个行为通过 memory 实例上的 `merge_historical_media` 配置，而不是通过 `Agent` 透传。当 `merge_historical_media=True` 时，重复的历史附件会以索引标签引用的形式返回，而不是重复 media block。
 
 ```python
 from masfactory import Agent, HistoryMemory

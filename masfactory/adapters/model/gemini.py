@@ -1,42 +1,26 @@
 from __future__ import annotations
 
-import json
-
 try:
     from google import genai  # type: ignore
 except ImportError:  # pragma: no cover
     genai = None  # type: ignore
 
-from .base import Model, ModelResponseType
-from ..token_usage_tracker import TokenUsageTracker
+from masfactory.adapters.token_usage_tracker import TokenUsageTracker
+from masfactory.core.multimodal import MediaMessageBlock, TextMessageBlock
 
-
-def _normalize_gemini_tool_choice(tool_choice: str | dict | None) -> dict | None:
-    if tool_choice is None:
-        return None
-    if isinstance(tool_choice, dict):
-        return tool_choice
-
-    normalized = tool_choice.strip().lower()
-    if normalized == "auto":
-        return {"function_calling_config": {"mode": "AUTO"}}
-    if normalized == "required":
-        return {"function_calling_config": {"mode": "ANY"}}
-    if normalized == "none":
-        return {"function_calling_config": {"mode": "NONE"}}
-    raise ValueError("Gemini tool_choice must be 'auto', 'required', 'none', or a provider-native dict.")
-
-
-def _normalize_gemini_tool_response(content: object) -> dict:
-    if isinstance(content, dict):
-        return content
-    if isinstance(content, str):
-        return {"result": content}
-    return {"result": content}
+from .base import Model, ModelCapabilities, ModelResponseType
+from .common import (
+    assistant_message_from_tool_calls,
+    build_capabilities,
+    canonical_tool_calls,
+    content_blocks,
+    content_to_text,
+    validate_media_capability,
+)
 
 
 class GeminiModel(Model):
-    """Gemini chat model adapter using the `google-genai` SDK."""
+    """Gemini chat model adapter using the google-genai SDK."""
 
     def __init__(
         self,
@@ -44,10 +28,19 @@ class GeminiModel(Model):
         api_key: str,
         base_url: str | None = None,
         invoke_settings: dict | None = None,
+        capability_overrides: dict | None = None,
         **kwargs,
     ):
-        """Create a Gemini model adapter."""
-        super().__init__(model_name, invoke_settings, **kwargs)
+        capabilities = build_capabilities(
+            ModelCapabilities(
+                image_input=True,
+                pdf_input=True,
+                image_sources=frozenset({"base64", "bytes", "path", "url"}),
+                pdf_sources=frozenset({"base64", "bytes", "path", "url"}),
+            ),
+            capability_overrides,
+        )
+        super().__init__(model_name, invoke_settings, capabilities=capabilities, **kwargs)
 
         if model_name is None or model_name == "":
             raise ValueError("Gemini model_name is required.")
@@ -70,11 +63,7 @@ class GeminiModel(Model):
 
         self._client = genai.Client(api_key=api_key, http_options=http_options, **kwargs)
         self._model_name = model_name
-        self._token_tracker = TokenUsageTracker(
-            model_name=model_name,
-            api_key=api_key,
-            base_url=base_url,
-        )
+        self._token_tracker = TokenUsageTracker(model_name=model_name, api_key=api_key, base_url=base_url)
         try:
             model_info = self._client.models.get(model=model_name)
             if hasattr(model_info, "model_dump"):
@@ -85,36 +74,21 @@ class GeminiModel(Model):
                 self._description = dict(model_info)
         except Exception:
             self._description = {"id": model_name, "object": "model"}
+
         self._settings_mapping = {
-            "temperature": {
-                "name": "temperature",
-                "type": float,
-                "section": [0.0, 2.0],
-            },
-            "max_tokens": {
-                "name": "max_output_tokens",
-                "type": int,
-            },
-            "top_p": {
-                "name": "top_p",
-                "type": float,
-                "section": [0.0, 1.0],
-            },
-            "stop": {
-                "name": "stop_sequences",
-                "type": list[str],
-            },
-            "tool_choice": {
-                "name": "tool_choice",
-                "type": (str, dict),
-            },
+            "temperature": {"name": "temperature", "type": float, "section": [0.0, 2.0]},
+            "max_tokens": {"name": "max_output_tokens", "type": int},
+            "top_p": {"name": "top_p", "type": float, "section": [0.0, 1.0]},
+            "stop": {"name": "stop_sequences", "type": list[str]},
+            "tool_choice": {"name": "tool_config", "type": dict},
         }
 
     def _parse_response(self, response) -> dict:
         result: dict = {}
-
         tool_calls: list[dict] = []
-        followup_parts: list[dict] = []
+        assistant_parts: list[object] = []
+        raw_text_parts: list[str] = []
+
         if hasattr(response, "candidates") and response.candidates:
             candidate = response.candidates[0]
             content = getattr(candidate, "content", None)
@@ -122,44 +96,38 @@ class GeminiModel(Model):
             for part in parts:
                 function_call = getattr(part, "function_call", None)
                 if function_call:
-                    args = getattr(function_call, "args", None) or {}
                     tool_calls.append(
                         {
                             "id": getattr(function_call, "id", None),
                             "name": getattr(function_call, "name", None),
-                            "arguments": args,
-                        }
-                    )
-                    followup_parts.append(
-                        {
-                            "function_call": {
-                                "name": getattr(function_call, "name", None),
-                                "args": args,
-                            }
+                            "arguments": getattr(function_call, "args", None) or {},
                         }
                     )
                     continue
-
                 text = getattr(part, "text", None)
                 if text:
-                    followup_parts.append({"text": text})
+                    raw_text_parts.append(text)
+                    assistant_parts.append(TextMessageBlock(text=text))
 
         if tool_calls:
             result["type"] = ModelResponseType.TOOL_CALL
             result["content"] = tool_calls
-            result["followup_messages"] = [{"role": "model", "parts": followup_parts}]
-        elif hasattr(response, "text") and response.text is not None:
-            result["type"] = ModelResponseType.CONTENT
-            result["content"] = response.text
+            assistant_message_content: object = assistant_parts if assistant_parts else ""
+            result["assistant_message"] = assistant_message_from_tool_calls(tool_calls, assistant_message_content)
         else:
-            raise ValueError("Response is not valid or contains unsupported content")
+            text_content = "".join(raw_text_parts)
+            if not text_content and hasattr(response, "text") and response.text is not None:
+                text_content = response.text
+            if not text_content:
+                raise ValueError("Response is not valid or contains unsupported content")
+            result["type"] = ModelResponseType.CONTENT
+            result["content"] = text_content
 
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             self._token_tracker.accumulate(
                 input_usage=response.usage_metadata.prompt_token_count,
                 output_usage=response.usage_metadata.candidates_token_count,
             )
-
         return result
 
     def invoke(
@@ -169,11 +137,37 @@ class GeminiModel(Model):
         settings: dict | None = None,
         **kwargs,
     ) -> dict:
-        """Invoke the Gemini generate_content API."""
         from google.genai import types
 
         if kwargs:
             print(f"[GeminiModel.invoke] Ignoring unexpected kwargs: {list(kwargs.keys())}")
+
+        def encode_gemini_parts(content: object) -> list[types.Part]:
+            parts: list[types.Part] = []
+            for block in content_blocks(content):
+                if isinstance(block, str):
+                    parts.append(types.Part.from_text(text=block))
+                    continue
+                if isinstance(block, TextMessageBlock):
+                    parts.append(types.Part.from_text(text=block.text))
+                    continue
+                if isinstance(block, MediaMessageBlock):
+                    validate_media_capability(
+                        provider="Gemini",
+                        model_name=self.model_name,
+                        capabilities=self.capabilities,
+                        block=block,
+                    )
+                    asset = block.asset
+                    if asset.source_kind == "url":
+                        parts.append(types.Part.from_uri(file_uri=str(asset.value), mime_type=asset.mime_type))
+                    else:
+                        parts.append(types.Part.from_bytes(data=asset.load_bytes(), mime_type=asset.mime_type))
+                    continue
+                parts.append(types.Part.from_text(text=str(block)))
+            if not parts:
+                parts.append(types.Part.from_text(text=""))
+            return parts
 
         system_parts: list[str] = []
         contents: list[types.Content] = []
@@ -183,56 +177,44 @@ class GeminiModel(Model):
             content = message.get("content")
 
             if role == "system":
-                if content is not None:
-                    system_parts.append(str(content))
+                if any(isinstance(block, MediaMessageBlock) for block in content_blocks(content)):
+                    raise ValueError(
+                        "GeminiModel does not support system-side media content. "
+                        "Use a text-only system prompt or switch to a model adapter that supports it."
+                    )
+                system_text = content_to_text(content)
+                if system_text:
+                    system_parts.append(system_text)
+                continue
+
+            if role == "assistant":
+                tool_calls = canonical_tool_calls(message)
+                if tool_calls:
+                    parts = encode_gemini_parts(content)
+                    for tool_call in tool_calls:
+                        parts.append(
+                            types.Part.from_function_call(
+                                name=tool_call.get("name"),
+                                args=tool_call.get("arguments", {}),
+                            )
+                        )
+                    contents.append(types.Content(role="model", parts=parts))
+                    continue
+                contents.append(types.Content(role="model", parts=encode_gemini_parts(content)))
                 continue
 
             if role == "tool":
-                tool_name = message.get("name") or "tool"
-                tool_response = _normalize_gemini_tool_response(content)
+                tool_name = message.get("name") or message.get("tool_call_id") or "tool"
+                tool_response = {"result": content_to_text(content)}
                 contents.append(
                     types.Content(
                         role="user",
-                        parts=[
-                            types.Part.from_function_response(
-                                name=tool_name,
-                                response=tool_response,
-                            )
-                        ],
+                        parts=[types.Part.from_function_response(name=tool_name, response=tool_response)],
                     )
                 )
                 continue
 
-            if role == "model" and isinstance(message.get("parts"), list):
-                parts_payload = []
-                for part in message["parts"]:
-                    function_call = part.get("function_call") if isinstance(part, dict) else None
-                    if function_call:
-                        parts_payload.append(
-                            types.Part(
-                                function_call=types.FunctionCall(
-                                    name=function_call.get("name"),
-                                    args=function_call.get("args") or {},
-                                )
-                            )
-                        )
-                contents.append(types.Content(role="model", parts=parts_payload))
-                continue
-
-            if content is None:
-                text = ""
-            elif isinstance(content, str):
-                text = content
-            else:
-                try:
-                    text = json.dumps(content, ensure_ascii=False)
-                except Exception:
-                    text = str(content)
-
-            if role == "assistant":
-                role = "model"
-
-            contents.append(types.Content(role=role, parts=[types.Part.from_text(text=text)]))
+            contents.append(types.Content(role=role, parts=encode_gemini_parts(content)))
 
         function_declarations: list[types.FunctionDeclaration] = []
         if tools:
@@ -246,13 +228,10 @@ class GeminiModel(Model):
                 )
 
         config_kwargs = self._parse_settings(settings)
-        tool_choice = _normalize_gemini_tool_choice(config_kwargs.pop("tool_choice", None))
         if system_parts:
             config_kwargs["system_instruction"] = "\n\n".join(system_parts)
         if function_declarations:
             config_kwargs["tools"] = [types.Tool(function_declarations=function_declarations)]
-            if tool_choice is not None:
-                config_kwargs["tool_config"] = tool_choice
 
         config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
         response = self._client.models.generate_content(
@@ -260,7 +239,6 @@ class GeminiModel(Model):
             contents=contents,
             config=config,
         )
-
         return self._parse_response(response)
 
     def generate_images(
@@ -275,7 +253,6 @@ class GeminiModel(Model):
         user: str = None,
         **kwargs,
     ) -> list[dict]:
-        """Generate images using Google Imagen via the Gemini SDK."""
         size_mapping = {
             "256x256": "1K",
             "512x512": "1K",
@@ -286,11 +263,7 @@ class GeminiModel(Model):
         }
         imagen_size = size_mapping.get(size, "1K")
         imagen_model = model if model is not None else "imagen-3.0-generate-002"
-
-        config = {
-            "number_of_images": n,
-            "image_size": imagen_size,
-        }
+        config = {"number_of_images": n, "image_size": imagen_size}
 
         imagen_specific_params = [
             "aspect_ratio",
@@ -308,11 +281,9 @@ class GeminiModel(Model):
 
         try:
             from google.genai import types
-            import base64
 
             if "compression_quality" in config:
                 config["output_compression_quality"] = config.pop("compression_quality")
-
             if kwargs:
                 print(f"[GeminiModel.generate_images] Ignoring unexpected kwargs: {list(kwargs.keys())}")
 
@@ -323,25 +294,23 @@ class GeminiModel(Model):
                 config=generation_config,
             )
 
-            images = []
+            images: list[dict] = []
             for generated_image in response.generated_images:
-                img_dict = {}
+                img_dict: dict = {}
                 if hasattr(generated_image, "image") and hasattr(generated_image.image, "image_bytes"):
+                    import base64
+
                     img_dict["b64_json"] = base64.b64encode(generated_image.image.image_bytes).decode("utf-8")
                 if hasattr(generated_image, "image") and hasattr(generated_image.image, "mime_type"):
                     img_dict["mime_type"] = generated_image.image.mime_type
                 if hasattr(generated_image, "rai_filtered_reason") and generated_image.rai_filtered_reason:
                     img_dict["rai_filtered_reason"] = generated_image.rai_filtered_reason
                 images.append(img_dict)
-
             return images
         except ImportError:
             raise ImportError(
                 "Google GenAI library is required for image generation. "
                 "Please install it with: pip install google-genai"
             )
-        except Exception as e:
-            raise RuntimeError(f"Failed to generate images with Gemini Imagen: {str(e)}")
-
-
-__all__ = ["GeminiModel"]
+        except Exception as exc:
+            raise RuntimeError(f"Failed to generate images with Gemini Imagen: {str(exc)}")

@@ -6,7 +6,7 @@ MASFactory uses **model adapters** to hide differences across LLM providers and 
 
 ## Source of truth (code)
 
-- `Model` interface and built-in implementations: `masfactory/adapters/model.py`
+- `Model` interface and built-in implementations: `masfactory/adapters/model/`
 
 ---
 

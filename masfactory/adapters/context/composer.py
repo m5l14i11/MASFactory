@@ -18,7 +18,7 @@ class ContextComposer:
     renderer: ContextRenderer = DefaultContextRenderer()
 
     def inject_user_payload(self, user_payload: dict, query: ContextQuery, *, top_k: int = 8) -> dict:
-        provider_blocks = self._collect_provider_blocks(query, top_k=top_k)
+        provider_blocks = self.collect_provider_blocks(query, top_k=top_k)
         selected = self.policy.select(provider_blocks, top_k=top_k)
         return self.renderer.inject(user_payload, selected)
 
@@ -42,7 +42,7 @@ class ContextComposer:
                 unique.append(msg)
         return unique
 
-    def _collect_provider_blocks(self, query: ContextQuery, *, top_k: int) -> list[ProviderBlocks]:
+    def collect_provider_blocks(self, query: ContextQuery, *, top_k: int) -> list[ProviderBlocks]:
         results: list[ProviderBlocks] = []
         for provider in self.providers:
             label = self._provider_label(provider)
@@ -53,6 +53,9 @@ class ContextComposer:
             if blocks:
                 results.append((label, blocks))
         return results
+
+    def _collect_provider_blocks(self, query: ContextQuery, *, top_k: int) -> list[ProviderBlocks]:
+        return self.collect_provider_blocks(query, top_k=top_k)
 
     def _provider_label(self, provider: ContextProvider) -> str:
         return getattr(provider, "context_label", provider.__class__.__name__)

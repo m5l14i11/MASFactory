@@ -35,7 +35,7 @@ class MyModel(Model):
         return {"type": ModelResponseType.CONTENT, "content": text}
 ```
 
-Reference implementation: `masfactory/adapters/model.py`.
+Reference implementation: `masfactory/adapters/model/`.
 
 ---
 
@@ -60,10 +60,10 @@ class MyMemory(Memory):
         super().__init__(context_label="MY_MEMORY")
         self._store: list[str] = []
 
-    def insert(self, key: str, value: str):
+    def insert(self, key: str, value: object):
         self._store.append(f"{key}: {value}")
 
-    def update(self, key: str, value: str):
+    def update(self, key: str, value: object):
         return None
 
     def delete(self, key: str, index: int = -1):
@@ -157,10 +157,10 @@ class CounterMemory(Memory):
         super().__init__(context_label="COUNTER", passive=False, active=False)
         self._n = 0
 
-    def insert(self, key: str, value: str):
+    def insert(self, key: str, value: object):
         self._n += 1
 
-    def update(self, key: str, value: str):
+    def update(self, key: str, value: object):
         return None
 
     def delete(self, key: str, index: int = -1):
@@ -209,10 +209,10 @@ class CounterMemory(Memory):
         super().__init__(context_label="COUNTER", passive=False, active=False)
         self._n = 0
 
-    def insert(self, key: str, value: str):
+    def insert(self, key: str, value: object):
         self._n += 1
 
-    def update(self, key: str, value: str):
+    def update(self, key: str, value: object):
         return None
 
     def delete(self, key: str, index: int = -1):
